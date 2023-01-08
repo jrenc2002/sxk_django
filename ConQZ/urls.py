@@ -20,4 +20,8 @@ urlpatterns = [
     path('get_exam_info/',views.get_exam_info),
     # # http://192.168.21.128:8000/qz/get_share_info/
     path('get_share_info/',views.get_share_info),
+    # # http://192.168.21.128:8000/qz/post_share_info/
+    path('post_share_info/',views.post_share_info),
+    # # http://192.168.21.128:8000/qz/reply_share_info/
+    path('reply_share_info/', views.reply_share_info),
 ]

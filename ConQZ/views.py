@@ -33,6 +33,7 @@ def get_login_info(request):
         "code": 2002,
         "message": "Invalid Login"
     }
+    error = json.dumps(error)
     global HEADERS, url
     session = requests.Session()
     req = session.get(url, params=params, timeout=5, headers=HEADERS)
@@ -73,9 +74,10 @@ def get_student_info(request):
         print(req.text)
         print("session对话错误")
         error = {
-            "code": 401,
+            "code": 4001,
             "message": "Session Error"
         }
+        error = json.dumps(error)
         return HttpResponse(content=error, content_type='application/json')
     s = json.loads(req.text)
     print(User.objects.filter(Snumber=_account))
@@ -86,7 +88,7 @@ def get_student_info(request):
         password = User.objects.filter(Snumber=_account).values('PasswordQZ')
         password = password[0]['PasswordQZ']
         if password != _password:
-            user_obj = User.objects.get(Snumber=202001041412)
+            user_obj = User.objects.get(Snumber=_account)
             user_obj.PasswordQZ = _password
             user_obj.save()
             print("对新用户进行了更新密码的操作")
@@ -102,6 +104,200 @@ def get_student_info(request):
         share_obj.save()
         print("对新用户进行了创建共享表操作")
     return HttpResponse(content=req,content_type='application/json')
+
+def reply_share_info(request):
+    postbody=request.body
+    print(postbody)
+    json_param = json.loads(postbody.decode())
+    _account = json_param.get('account')
+    _password = json_param.get('password')
+    _reply = json_param.get('reply')
+    _postnum = json_param.get('postnum')
+    _cont = json_param.get("cont")
+    Userresult = User.objects.filter(Snumber=_account)
+    Shareresult = Share.objects.filter(Usernumber_id=_account)
+    #查找登录用户是否注册
+    if not Userresult.exists():
+        error = {
+            "code": 4001,
+            "message": "Not User"
+        }
+        error = json.dumps(error)
+        print(error)
+        return HttpResponse(content=error, content_type='application/json')
+    #查找登录用户共享表是否注册
+    if not Shareresult.exists():
+        share_obj = Share.objects.create(Usernumber_id=_account)
+        share_obj.save()
+        print("对新用户进行了创建共享表操作")
+    password=User.objects.filter(Snumber=_account).values('PasswordQZ')
+    password=password[0]['PasswordQZ']
+    # 查找登录用户共享表是否注册
+    if password==_password:
+        #不查看对方有没有注册
+        # Userresult = User.objects.filter(Snumber=_postnum)
+        # if not Userresult.exists():
+        #     error = {
+        #         "code": 4002,
+        #         "message": "Not User Other"
+        #     }
+        #     error = json.dumps(error)
+        #     print(error)
+        #     return HttpResponse(content=error, content_type='application/json')
+        # # Shareresult = Share.objects.filter(Usernumber_id=_postnum)
+
+        # if not Shareresult.exists():
+        #     share_obj = Share.objects.create(Usernumber_id=_postnum)
+        #     share_obj.save()
+        #     print("对新用户进行了创建共享表操作")
+        if _cont==0:
+            # 我同意别人请求
+            if _reply==True:
+                try:
+                    #同意的代码还没写
+                    # user_obj = Share.objects.get(Usernumber_id=_account)
+                    # user_obj.CBindState = 1
+                    # user_obj.CBindNumber=_postnum
+                    # user_obj.save()
+                    # user_obj = Share.objects.get(Usernumber_id=_postnum)
+                    # user_obj.CBindState = 2
+                    # user_obj.CBindNumber=_account
+                    # user_obj.save()
+                except:
+                    error = {
+                        "code": 4004,
+                        "message": "DB Error"
+                    }
+                    error = json.dumps(error)
+                    return HttpResponse(content=error, content_type='application/json')
+                info = {
+                    "code": 2000,
+                    "message": "Prefect"
+                }
+                info = json.dumps(info)
+                return HttpResponse(content=info, content_type='application/json')
+            # 我拒绝别人请求
+            elif _reply == False:
+
+        elif _cont==1:
+            # 我向别人发送请求，此时我的绑定状态为1，学号变成具体值
+            user_obj = Share.objects.get(Usernumber_id=_account)
+            user_obj.GBindState = 1
+            user_obj.GBindNumber = _postnum
+            user_obj.save()
+            info = {
+                "code": 2000,
+                "message": "Prefect"
+            }
+            info = json.dumps(info)
+            return HttpResponse(content=info, content_type='application/json')
+            # 我向别人发送请求，此时别人的绑定状态为2，学号变成具体值
+            user_obj = Share.objects.get(Usernumber_id=_postnum)
+            user_obj.GBindState = 2
+            user_obj.GBindNumber = _account
+            user_obj.save()
+            info = {
+                "code": 2000,
+                "message": "Prefect"
+            }
+            info = json.dumps(info)
+            return HttpResponse(content=info, content_type='application/json')
+    else:
+        error = {
+            "code": 4000,
+            "message": "Invalid Login"
+        }
+        error = json.dumps(error)
+        print(error)
+        return HttpResponse(content=error, content_type='application/json')
+def post_share_info(request):
+    postbody=request.body
+    print(postbody)
+    json_param = json.loads(postbody.decode())
+    _account = json_param.get('account')
+    _password = json_param.get('password')
+    _postnum = json_param.get('postnum')
+    _cont = json_param.get("cont")
+    Userresult = User.objects.filter(Snumber=_account)
+    Shareresult = Share.objects.filter(Usernumber_id=_account)
+    if not Userresult.exists():
+        error = {
+            "code": 4001,
+            "message": "Not User"
+        }
+        error = json.dumps(error)
+        print(error)
+        return HttpResponse(content=error, content_type='application/json')
+    if not Shareresult.exists():
+        share_obj = Share.objects.create(Usernumber_id=_account)
+        share_obj.save()
+        print("对新用户进行了创建共享表操作")
+    password=User.objects.filter(Snumber=_account).values('PasswordQZ')
+    password=password[0]['PasswordQZ']
+    if password==_password:
+        #看对方有没有注册
+        Userresult = User.objects.filter(Snumber=_postnum)
+        if not Userresult.exists():
+            error = {
+                "code": 4002,
+                "message": "Not User Other"
+            }
+            error = json.dumps(error)
+            print(error)
+            return HttpResponse(content=error, content_type='application/json')
+        # Shareresult = Share.objects.filter(Usernumber_id=_postnum)
+        # if not Shareresult.exists():
+        #     share_obj = Share.objects.create(Usernumber_id=_postnum)
+        #     share_obj.save()
+        #     print("对新用户进行了创建共享表操作")
+        if _cont==0:
+            # 我向别人发送请求，此时我的绑定状态为1，学号变成具体值
+            user_obj = Share.objects.get(Usernumber_id=_account)
+            user_obj.CBindState = 1
+            user_obj.CBindNumber=_postnum
+            user_obj.save()
+            # 我向别人发送请求，此时别人的绑定状态为2，学号变成具体值
+            user_obj = Share.objects.get(Usernumber_id=_postnum)
+            user_obj.CBindState = 2
+            user_obj.CBindNumber=_account
+            user_obj.save()
+            info = {
+                "code": 2000,
+                "message": "Prefect"
+            }
+            info = json.dumps(info)
+            return HttpResponse(content=info, content_type='application/json')
+        elif _cont==1:
+            # 我向别人发送请求，此时我的绑定状态为1，学号变成具体值
+            user_obj = Share.objects.get(Usernumber_id=_account)
+            user_obj.GBindState = 1
+            user_obj.GBindNumber = _postnum
+            user_obj.save()
+            info = {
+                "code": 2000,
+                "message": "Prefect"
+            }
+            info = json.dumps(info)
+            return HttpResponse(content=info, content_type='application/json')
+            # 我向别人发送请求，此时别人的绑定状态为2，学号变成具体值
+            user_obj = Share.objects.get(Usernumber_id=_postnum)
+            user_obj.GBindState = 2
+            user_obj.GBindNumber = _account
+            user_obj.save()
+            info = {
+                "code": 2000,
+                "message": "Prefect"
+            }
+            info = json.dumps(info)
+            return HttpResponse(content=info, content_type='application/json')
+    else:
+        error = {
+            "code": 4000,
+            "message": "Invalid Login"
+        }
+        error = json.dumps(error)
+        print(error)
+        return HttpResponse(content=error, content_type='application/json')
 def get_share_info(request):
     postbody=request.body
     print(postbody)
@@ -112,7 +308,7 @@ def get_share_info(request):
     Shareresult = Share.objects.filter(Usernumber_id=_account)
     if not Userresult.exists():
         error = {
-            "code": 401,
+            "code": 4001,
             "message": "Not User"
         }
         return HttpResponse(content=error, content_type='application/json')
@@ -133,7 +329,7 @@ def get_share_info(request):
         return HttpResponse(content=data_json, content_type='application/json')
     else:
         error = {
-            "code": 400,
+            "code": 4000,
             "message": "Invalid Login"
         }
         return HttpResponse(content=error, content_type='application/json')
