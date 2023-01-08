@@ -10,3 +10,12 @@ class User(models.Model):
     Collegename=models.CharField('学院名称',max_length=50,default='')
     Enteryear=models.IntegerField('入学年份',default='')
     Gradenumber=models.IntegerField('当前年级',default='')
+
+class Share(models.Model):
+    Usernumber = models.OneToOneField(User,verbose_name='学号',on_delete=models.PROTECT, primary_key=True)
+    CBindState=models.IntegerField('课程绑定状态',default=0,blank=True,null=True)
+    CBindNumber=models.BigIntegerField('课程绑定学号',default=-1,blank=True,null=True)
+    GBindState=models.IntegerField('成绩绑定状态',default=0,blank=True,null=True)
+    GBindNumber=models.BigIntegerField('成绩绑定学号',default=-1,blank=True,null=True)
+
+

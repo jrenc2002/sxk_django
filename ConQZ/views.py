@@ -2,8 +2,11 @@ import ast
 import datetime
 import json
 from django.contrib.sites import requests
+from django.core import serializers
 from django.http import HttpResponse
 import requests as requests
+from ConQZ.models import User,Share
+
 from django.shortcuts import render
 
 # Create your views here.
@@ -21,7 +24,6 @@ def get_login_info(request):
     json_param = json.loads(postbody.decode())
     _account = json_param.get('account')
     _password = json_param.get('password')
-
     params = {
         "method": "authUser",
         "xh": _account,
@@ -35,8 +37,9 @@ def get_login_info(request):
     session = requests.Session()
     req = session.get(url, params=params, timeout=5, headers=HEADERS)
     s = json.loads(req.text)
+    print(s["flag"])
     if s["flag"] != "1":
-        return error
+        return HttpResponse(content=error,content_type='application/json')
     HEADERS["token"] = s["token"]
     global cookies
     cookies = session.cookies
@@ -50,6 +53,7 @@ def get_login_info(request):
 
 def get_student_info(request):
     postbody=request.body
+    print(postbody)
     json_param = json.loads(postbody.decode())
     _account = json_param.get('account')
     _password = json_param.get('password')
@@ -63,9 +67,76 @@ def get_student_info(request):
             "method": "getUserInfo",
             "xh": _account
         }
-    req = session.get(url, params=params, timeout=5, headers=HEADERS)
-
+    try:
+        req = session.get(url, params=params, timeout=5, headers=HEADERS)
+    except:
+        print(req.text)
+        print("session对话错误")
+        error = {
+            "code": 401,
+            "message": "Session Error"
+        }
+        return HttpResponse(content=error, content_type='application/json')
+    s = json.loads(req.text)
+    print(User.objects.filter(Snumber=_account))
+    Userresult=User.objects.filter(Snumber=_account)
+    print("Userresult.exists()=",Userresult.exists())
+    #做一个密码匹配
+    if Userresult.exists():
+        password = User.objects.filter(Snumber=_account).values('PasswordQZ')
+        password = password[0]['PasswordQZ']
+        if password != _password:
+            user_obj = User.objects.get(Snumber=202001041412)
+            user_obj.PasswordQZ = _password
+            user_obj.save()
+            print("对新用户进行了更新密码的操作")
+    if not Userresult.exists():
+        user_obj =User.objects.create(Snumber=int(s['xh']),Name=s['xm'],PasswordQZ=_password,
+                             Classname=s['bj'],Majorname=s['zymc'],Collegename=s['yxmc'],Enteryear=int(s['rxnf']),Gradenumber=int(s['usertype']))
+        user_obj.save()
+        print("对新用户进行了创建用户表操作")
+    Shareresult = Share.objects.filter(Usernumber_id=_account)
+    print("Shareresult.exists()=",Shareresult.exists())
+    if not Shareresult.exists():
+        share_obj = Share.objects.create(Usernumber_id=_account)
+        share_obj.save()
+        print("对新用户进行了创建共享表操作")
     return HttpResponse(content=req,content_type='application/json')
+def get_share_info(request):
+    postbody=request.body
+    print(postbody)
+    json_param = json.loads(postbody.decode())
+    _account = json_param.get('account')
+    _password = json_param.get('password')
+    Userresult = User.objects.filter(Snumber=_account)
+    Shareresult = Share.objects.filter(Usernumber_id=_account)
+    if not Userresult.exists():
+        error = {
+            "code": 401,
+            "message": "Not User"
+        }
+        return HttpResponse(content=error, content_type='application/json')
+    if not Shareresult.exists():
+        share_obj = Share.objects.create(Usernumber_id=_account)
+        share_obj.save()
+        print("对新用户进行了创建共享表操作")
+    password=User.objects.filter(Snumber=_account).values('PasswordQZ')
+    password=password[0]['PasswordQZ']
+    if password==_password:
+        data = serializers.serialize("json", Share.objects.filter(Usernumber_id=_account))
+        print(data)
+        print(type(data))
+        data_json= json.loads(data)
+        data_json=json.dumps(data_json[0]['fields'])
+        print(data_json)
+        print(type(data_json))
+        return HttpResponse(content=data_json, content_type='application/json')
+    else:
+        error = {
+            "code": 400,
+            "message": "Invalid Login"
+        }
+        return HttpResponse(content=error, content_type='application/json')
 
 def get_current_time(request):
     postbody=request.body
@@ -73,7 +144,6 @@ def get_current_time(request):
     _account = json_param.get('account')
     _password = json_param.get('password')
     cookiesstr = json_param.get("cookiesstr")
-
     cookies = requests.utils.cookiejar_from_dict(cookiesstr)
     session = requests.Session()
     session.cookies = cookies
