@@ -18,9 +18,9 @@ class Share(models.Model):
     GBindState=models.IntegerField('成绩绑定状态',default=0,blank=True,null=True)
     GBindNumber=models.BigIntegerField('成绩绑定学号',default=-1,blank=True,null=True)
 
-# class LikesInfo(models.Model):
-#    Groupname=models.CharField('同好名称',max_length=30,default='')
-#    QQGroupNumber=models.CharField('同好群号',max_length=50,default='')
-#    InfoContent=models.TextField('介绍内容')
-#    LikesStatic=models.ImageField('同好群文件路径',blank=True,null=True)
-   #还没更新，明天记得先更新一下；
+class LikesInfo(models.Model):
+   Groupname=models.CharField('同好名称',max_length=30,default='')
+   QQGroupNumber=models.CharField('同好群号',max_length=50,default='')
+   InfoContent=models.TextField('介绍内容')
+   LikesStatic=models.ImageField('同好群文件路径',blank=True,null=True)
+#    还没更新，明天记得先更新一下；

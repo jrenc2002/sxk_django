@@ -5,7 +5,7 @@ from django.contrib.sites import requests
 from django.core import serializers
 from django.http import HttpResponse
 import requests as requests
-from ConQZ.models import User,Share
+from ConQZ.models import User,Share,LikesInfo
 
 from django.shortcuts import render
 
@@ -253,7 +253,6 @@ def get_exam_info(request):  # put application's code here
     }
     req = session.get(url, params=params, timeout=5, headers=HEADERS)
     return HttpResponse(content=req, content_type='application/json')
-
 #共享课表/成绩路由
 def reply_share_info(request):
     postbody=request.body
@@ -766,3 +765,11 @@ def get_share_info(request):
         }
         req = session.get(url, params=params, timeout=5, headers=HEADERS)
         return HttpResponse(content=req, content_type='application/json')
+#小科通讯录
+def get_phonebook_info(request):
+
+    content = serializers.serialize("json", LikesInfo.objects.all())
+    print(content)
+    print(type(content))
+
+    return HttpResponse(content=content, content_type='application/json')
