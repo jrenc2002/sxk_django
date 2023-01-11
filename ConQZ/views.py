@@ -124,14 +124,12 @@ def get_class_info(request):
     _account = json_param.get('account')
     _password = json_param.get('password')
     cookiesstr = json_param.get("cookiesstr")
-    get_cont = json_param.get("cont")
+    zc = json_param.get("cont",-1)
 
     cookies = requests.utils.cookiejar_from_dict(cookiesstr)
     session = requests.Session()
     session.cookies = cookies
-    zc = -1
-    if (get_cont != None):
-        zc = get_cont
+
 
     params = {
         "method": "getCurrentTime",
@@ -139,6 +137,8 @@ def get_class_info(request):
     }
     req = session.get(url, params=params, timeout=5, headers=HEADERS)
     s = json.loads(req.text)
+    if s["zc"]==None:
+        s["zc"]=1
     params = {
         "method": "getKbcxAzc",
         "xnxqid": s["xnxqh"],
@@ -146,10 +146,13 @@ def get_class_info(request):
         "xh": _account
     }
     req = session.get(url, params=params, timeout=5, headers=HEADERS)
-    print(req)
+    table_ord = json.loads(req.text)
+    if table_ord[0]==None:
+
+        return HttpResponse(content="[]", content_type='application/json')
+
     # 将爬取到的数据转成前端需要的数据，格式转换
-    table_ord = ast.literal_eval(req.text)
-    print(table_ord)
+
     # color随机选择莫兰迪色
     tablecolor = ["#849B91", "#B4746B", "#99857E", "#91A0A5"
         , "#A79A89", "#8A95A9", "#9AA690", "#B4746B", "#AB545A"
@@ -767,9 +770,12 @@ def get_share_info(request):
         return HttpResponse(content=req, content_type='application/json')
 #小科通讯录
 def get_phonebook_info(request):
-
     content = serializers.serialize("json", LikesInfo.objects.all())
     print(content)
     print(type(content))
 
     return HttpResponse(content=content, content_type='application/json')
+#小科食物库
+#小科备忘录
+#小科经验包
+#教室课表
