@@ -152,11 +152,14 @@ def get_class_info(request):
         return HttpResponse(content="[]", content_type='application/json')
 
     # 将爬取到的数据转成前端需要的数据，格式转换
-
-    # color随机选择莫兰迪色
-    tablecolor = ["#849B91", "#B4746B", "#99857E", "#91A0A5"
-        , "#A79A89", "#8A95A9", "#9AA690", "#B4746B", "#AB545A"
-        , "#B77F70", "#9FABB9", "#B57C82", "#686789"]
+    # color随机选择颜色
+    tablecolor = ["#ebb5cc", "#b2c196", "#edd492", "#fee5a3"
+        , "#e9daa3", "#ea7375", "#a286ea", "#776fdf", "#7bc6e6"
+        , "#efb293"]
+    # # color随机选择莫兰迪色
+    # tablecolor = ["#849B91", "#B4746B", "#99857E", "#91A0A5"
+    #     , "#A79A89", "#8A95A9", "#9AA690", "#B4746B", "#AB545A"
+    #     , "#B77F70", "#9FABB9", "#B57C82", "#686789"]
     # color随机选择apple超级亮色
     # tablecolor = ["#FF6961", "#FFB340", "#FFD426", "#30DB5B", "#70D7FF"
     #     , "#409CFF", "#707AFF", "#DA8FFF", "#FF6482"]
