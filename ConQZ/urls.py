@@ -28,4 +28,6 @@ urlpatterns = [
     path('get_share_info/', views.get_share_info),
     # # http://192.168.21.128:8000/qz/get_phonebook_info/
     path('get_phonebook_info/', views.get_phonebook_info),
+    # # http://192.168.21.128:8000/qz/get_courselib/
+    path('get_courselib/', views.get_courselib),
 ]

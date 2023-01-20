@@ -5,7 +5,7 @@ from django.contrib.sites import requests
 from django.core import serializers
 from django.http import HttpResponse
 import requests as requests
-from ConQZ.models import User,Share,LikesInfo
+from ConQZ.models import User,Share,LikesInfo,Course,CourseTime
 
 from django.shortcuts import render
 
@@ -45,7 +45,17 @@ def get_login_info(request):
     global cookies
     cookies = session.cookies
     print(session.cookies)
-    cookies_dict = requests.utils.dict_from_cookiejar(cookies)
+
+    try:
+        cookies_dict = requests.utils.dict_from_cookiejar(cookies)
+    except:
+        error = {
+            "code": 4008,
+            "message": "Login Error"
+        }
+        error = json.dumps(error)
+        print(error)
+        return HttpResponse(content=error, content_type='application/json')
     cookies_str = json.dumps(cookies_dict)
     # '{"JSESSIONID": "3474AAED60477A63776B77CC2B82E5FB"}'
     return  HttpResponse(content=cookies_str,content_type='application/json')
@@ -57,7 +67,16 @@ def get_student_info(request):
     _password = json_param.get('password')
     cookiesstr = json_param.get("cookiesstr")
     print(cookiesstr)
-    cookies = requests.utils.cookiejar_from_dict(cookiesstr)
+    try:
+        cookies = requests.utils.cookiejar_from_dict(cookiesstr)
+    except:
+        error = {
+            "code": 4008,
+            "message": "Login Error"
+        }
+        error = json.dumps(error)
+        print(error)
+        return HttpResponse(content=error, content_type='application/json')
     session = requests.Session()
     session.cookies = cookies
     global HEADERS,url
@@ -107,7 +126,16 @@ def get_current_time(request):
     _account = json_param.get('account')
     _password = json_param.get('password')
     cookiesstr = json_param.get("cookiesstr")
-    cookies = requests.utils.cookiejar_from_dict(cookiesstr)
+    try:
+        cookies = requests.utils.cookiejar_from_dict(cookiesstr)
+    except:
+        error = {
+            "code": 4008,
+            "message": "Login Error"
+        }
+        error = json.dumps(error)
+        print(error)
+        return HttpResponse(content=error, content_type='application/json')
     session = requests.Session()
     session.cookies = cookies
     global HEADERS,url
@@ -125,30 +153,56 @@ def get_class_info(request):
     _password = json_param.get('password')
     cookiesstr = json_param.get("cookiesstr")
     zc = json_param.get("cont",-1)
-
-    cookies = requests.utils.cookiejar_from_dict(cookiesstr)
+    try:
+        cookies = requests.utils.cookiejar_from_dict(cookiesstr)
+    except:
+        error = {
+            "code": 4008,
+            "message": "Login Error"
+        }
+        error = json.dumps(error)
+        print(error)
+        return HttpResponse(content=error, content_type='application/json')
     session = requests.Session()
     session.cookies = cookies
-
-
     params = {
         "method": "getCurrentTime",
         "currDate": datetime.datetime.now().strftime("%Y-%m-%d")
     }
     req = session.get(url, params=params, timeout=5, headers=HEADERS)
     s = json.loads(req.text)
-    if s["zc"]==None:
-        s["zc"]=1
+    try:
+        if s["zc"]==None:
+            s["zc"]=1
+    except:
+        error = {
+            "code": 4006,
+            "message": "QZ Error"
+        }
+        error = json.dumps(error)
+        print(error)
+        return HttpResponse(content=error, content_type='application/json')
     params = {
         "method": "getKbcxAzc",
         "xnxqid": s["xnxqh"],
         "zc": s["zc"] if zc == -1 else zc,
         "xh": _account
     }
-    req = session.get(url, params=params, timeout=5, headers=HEADERS)
-    table_ord = json.loads(req.text)
-    if table_ord[0]==None:
+    try:
+        req = session.get(url, params=params, timeout=5, headers=HEADERS)
+    except:
+        error = {
+            "code": 4006,
+            "message": "QZ Error"
+        }
+        error = json.dumps(error)
+        print(error)
+        return HttpResponse(content=error, content_type='application/json')
 
+    print(req.text)
+    table_ord = json.loads(req.text)
+
+    if table_ord[0]==None:
         return HttpResponse(content="[]", content_type='application/json')
 
     # 将爬取到的数据转成前端需要的数据，格式转换
@@ -173,15 +227,67 @@ def get_class_info(request):
         get_kcsj = newtable.get("kcsj")
         cout = int(get_kcsj[3] + get_kcsj[4])
         cout = int(cout / 2) - 1
-        get_kcmc = newtable.get("kcmc")
-        get_jsmc = newtable.get("jsmc")
-        get_jsxm = newtable.get("jsxm")
+        get_kcmc = newtable.get("kcmc")#课程名称
+        get_jsmc = newtable.get("jsmc")#上课教室
+        get_jsxm = newtable.get("jsxm")#老师名称
+        get_kkzc = newtable.get("kkzc")#上课星期
+        get_kcsj = newtable.get("kcsj")#上课时间
         # random.randrange(0,12,1)
         kcsj_day = int(get_kcsj[0]) - 1
+        # 课程名称
         table[kcsj_day][cout][0] = get_kcmc
+        #上课地址
         table[kcsj_day][cout][1] = get_jsmc
+        # 老师名称
         table[kcsj_day][cout][2] = get_jsxm
+        # -------------------------------课程数据表 begin-------------------------------- #
+        # "2-3,16-17"
+        # weekstring="["
+        # dh_fg=get_kkzc.split(',')
+        # for hg_i in len(dh_fg):
+        #     end_fg=dh_fg[hg_i].split('-')
+        #     weekstring=weekstring+"["+end_fg[0]+","+end_fg[1]+"],"
+        # weekstring = weekstring +  "]"
 
+        Courseresult = Course.objects.filter(CourseName=get_kcmc,CourseTeacher=get_jsxm,CoursePlace=get_jsmc)
+        # 所有东西都存储说明我存储了课，这样不会有重复的课
+        # 我没有存储这个课
+        if not Courseresult.exists():
+            NewCourse = Course.objects.create(CourseName=get_kcmc,CourseTeacher=get_jsxm,CoursePlace=get_jsmc)
+            NewCourse.save()
+            NewCourseTime = CourseTime.objects.create(CourseTime=get_kcsj, CourseWeek=get_kkzc, CourseId=NewCourse)
+            NewCourseTime.save()
+        # 我已经存储这个课
+        else:
+            # 现在看看有没有存储这个课的时间
+            Course_result = Course.objects.get(CourseName=get_kcmc,CourseTeacher=get_jsxm,CoursePlace=get_jsmc)
+            CourseTimeresult=Course_result.coursetime_set.all().values_list('CourseTime')
+            flag_time=True#没有相等的
+            for time_i in CourseTimeresult:
+                if time_i[0]==get_kcsj:
+                    flag_time=False#存在相等的
+                    break
+            # 不存在相等的时间，我要不要记录星期有没有时间相同星期不同？除非后期调课，原来的课调走后面的课然后调到相同时间这时会漏读多读。
+            if flag_time==True:
+                NewCourseTime = CourseTime.objects.create(CourseTime=get_kcsj, CourseWeek=get_kkzc, CourseId=Course_result)
+                NewCourseTime.save()
+
+
+            # Coursetable = [[[[] for j in range(5)] for i in range(5)] for k in range(7)]
+            # # 课程名称
+            # Coursetable[kcsj_day][cout][0] = get_kcmc
+            # # 上课教室
+            # Coursetable[kcsj_day][cout][1] = get_jsmc
+            # # 老师名称
+            # Coursetable[kcsj_day][cout][2] = get_jsxm
+            # # 上课星期
+            # Coursetable[kcsj_day][cout][3] = get_kkzc
+            # Coursetable_json = json.dumps(Coursetable, ensure_ascii=False, indent=2)
+            # Course_obj = Course.objects.create(CourseName=get_kcmc,CourseTeacher=get_jsxm,CoursePlace=get_jsmc,CourseTime=get_kcsj, CourseWeek=get_kkzc,
+            #                                    CourseTimeDict=Coursetable_json)
+            # Course_obj.save()
+        # --------------------------------课程数据表 end-------------------------------- #
+        # 给颜色
         for tablesame_i in tablesame:
             # 进行表的比对，如果same表存在就直接用颜色，不存在就给个新颜色
             if (tablesame_i[0] == get_kcmc):
@@ -209,7 +315,17 @@ def get_classroom_info(request):
 
     if (get_cont != None):
         idleTime=get_cont
-    cookies = requests.utils.cookiejar_from_dict(cookiesstr)
+
+    try:
+        cookies = requests.utils.cookiejar_from_dict(cookiesstr)
+    except:
+        error = {
+            "code": 4008,
+            "message": "Login Error"
+        }
+        error = json.dumps(error)
+        print(error)
+        return HttpResponse(content=error, content_type='application/json')
     session = requests.Session()
     session.cookies = cookies
     global HEADERS,url
@@ -232,7 +348,16 @@ def get_grade_info(request):  # put application's code here
     sy = ""
     if (get_cont != None):
         sy=get_cont
-    cookies = requests.utils.cookiejar_from_dict(cookiesstr)
+    try:
+        cookies = requests.utils.cookiejar_from_dict(cookiesstr)
+    except:
+        error = {
+            "code": 4008,
+            "message": "Login Error"
+        }
+        error = json.dumps(error)
+        print(error)
+        return HttpResponse(content=error, content_type='application/json')
     session = requests.Session()
     session.cookies = cookies
     params = {
@@ -250,7 +375,16 @@ def get_exam_info(request):  # put application's code here
     cookiesstr = json_param.get("cookiesstr")
     global HEADERS,url
 
-    cookies = requests.utils.cookiejar_from_dict(cookiesstr)
+    try:
+        cookies = requests.utils.cookiejar_from_dict(cookiesstr)
+    except:
+        error = {
+            "code": 4008,
+            "message": "Login Error"
+        }
+        error = json.dumps(error)
+        print(error)
+        return HttpResponse(content=error, content_type='application/json')
     session = requests.Session()
     session.cookies = cookies
     params = {
@@ -528,22 +662,25 @@ def post_share_info(request):
                 info = json.dumps(info)
                 return HttpResponse(content=info, content_type='application/json')
             elif _cont == 1:
-                # 我向别人发送请求，此时我的绑定状态为1，学号变成具体值
-                user_obj = Share.objects.get(Usernumber_id=_account)
-                user_obj.GBindState = 0
-                user_obj.GBindNumber = -1
-                user_obj.save()
-                info = {
-                    "code": 2000,
-                    "message": "Prefect"
-                }
-                info = json.dumps(info)
-                return HttpResponse(content=info, content_type='application/json')
-                # 我向别人发送请求，此时别人的绑定状态为2，学号变成具体值
-                user_obj = Share.objects.get(Usernumber_id=_postnum)
-                user_obj.GBindState = 0
-                user_obj.GBindNumber = -1
-                user_obj.save()
+                try:
+                    # 我向别人发送请求，此时我的绑定状态为1，学号变成具体值
+                    user_obj = Share.objects.get(Usernumber_id=_account)
+                    user_obj.GBindState = 0
+                    user_obj.GBindNumber = -1
+                    user_obj.save()
+                    # 我向别人发送请求，此时别人的绑定状态为2，学号变成具体值
+                    user_obj = Share.objects.get(Usernumber_id=_postnum)
+                    user_obj.GBindState = 0
+                    user_obj.GBindNumber = -1
+                    user_obj.save()
+                except:
+                    error = {
+                        "code": 4004,
+                        "message": "DB error"
+                    }
+                    error = json.dumps(error)
+                    print(error)
+                    return HttpResponse(content=error, content_type='application/json')
                 info = {
                     "code": 2000,
                     "message": "Prefect"
@@ -648,8 +785,17 @@ def get_share_info(request):
             "pwd": sharepassword
         }
         session = requests.Session()
-        req = session.get(url, params=params, timeout=5, headers=HEADERS)
-        s = json.loads(req.text)
+        try:
+            req = session.get(url, params=params, timeout=5, headers=HEADERS)
+            s = json.loads(req.text)
+        except:
+            error = {
+                "code": 4007,
+                "message": "Quickly Request"
+            }
+            error = json.dumps(error)
+            print(error)
+            return HttpResponse(content=error, content_type='application/json')
         if s["flag"] != "1":
             error = {
                 "code": 4000,
@@ -665,7 +811,17 @@ def get_share_info(request):
             "method": "getCurrentTime",
             "currDate": datetime.datetime.now().strftime("%Y-%m-%d")
         }
-        req = session.get(url, params=params, timeout=5, headers=HEADERS)
+
+        try:
+            req = session.get(url, params=params, timeout=5, headers=HEADERS)
+        except:
+            error = {
+                "code": 4006,
+                "message": "QZ Error"
+            }
+            error = json.dumps(error)
+            print(error)
+            return HttpResponse(content=error, content_type='application/json')
         s = json.loads(req.text)
         params = {
             "method": "getKbcxAzc",
@@ -675,8 +831,11 @@ def get_share_info(request):
         }
         req = session.get(url, params=params, timeout=5, headers=HEADERS)
         print(req)
+
         # 将爬取到的数据转成前端需要的数据，格式转换
-        table_ord = ast.literal_eval(req.text)
+        table_ord = json.loads(req.text)
+        if table_ord[0] == None:
+            return HttpResponse(content="[]", content_type='application/json')
         print(table_ord)
         # color随机选择莫兰迪色
         tablecolor = ["#849B91", "#B4746B", "#99857E", "#91A0A5"
@@ -781,4 +940,29 @@ def get_phonebook_info(request):
 #小科食物库
 #小科备忘录
 #小科经验包
-#教室课表
+#小科课程库
+def get_courselib(request):
+    postbody = request.body
+    print(postbody)
+    json_param = json.loads(postbody.decode())
+    _coursename = json_param.get('coursename')
+    _teachername = json_param.get('teachername')
+    _cont = json_param.get("cont")
+    _page = json_param.get("page")
+    # 节流请求全部数据
+    if _cont==0:
+        return
+        # 我该如何返回数据？
+        # 问题1   我记录的是每节课的数据所以如果我想导出所有课程的数据会存在重复数据
+        # 解决方法 1.建立一个新数组（表），只导前三项（实时性弱）
+        #        2.数据库一对多，一个数据库存课程，然后对应着一个表存时间(实时性强)
+        #        3.把coursetime和couseweek整合成多维数组的形式直接存放.(一劳永逸)
+        # 实例化    数据库 课程表 时间表
+
+    # 节流查询数据
+    # elif _cont==1:
+    #
+    #     return HttpResponse(content=req, content_type='application/json')
+def process_coureselib_data():
+    breakpoint()
+

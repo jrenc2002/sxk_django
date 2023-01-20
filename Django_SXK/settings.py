@@ -23,7 +23,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-^xz2ur@g4u8c=a2z3dfi=tvyt!3q_(-&bgs3sp_5&72_buwgp+'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 ALLOWED_HOSTS = ['192.168.21.128','0.0.0.0']
 
@@ -121,7 +121,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.1/howto/static-files/
 # http://192.168.21.128:8000/static/icon/home_before.png
-# http://192.168.21.128:8000/static/ScheduleContents/1.png
+# http://192.168.21.128:8000/static/ScheduleContents/LineFrame.png
 STATIC_URL = '/static/'
 STATICFILES_DIRS=(os.path.join(BASE_DIR,'static'),)
 
