@@ -942,6 +942,7 @@ def get_phonebook_info(request):
 #小科经验包
 #小科课程库
 def get_courselib(request):
+    # 输出的时候要输出id，然后我们可以通过id去反向查询。
     postbody = request.body
     print(postbody)
     json_param = json.loads(postbody.decode())
@@ -949,15 +950,72 @@ def get_courselib(request):
     _teachername = json_param.get('teachername')
     _cont = json_param.get("cont")
     _page = json_param.get("page")
-    # 节流请求全部数据
+    # 节流请求课程表数据
     if _cont==0:
-        return
+        Course_lib= serializers.serialize("json",Course.objects.all())
+        print(Course_lib)
+        print("-----")
+        Course_lib= json.loads(Course_lib)
+        Course_lib_list = [[[],[]] for k in range(10)]
+        for index in range((_page-1)*10,(_page)*10):
+            if len(Course_lib)>index:
+                print(index)
+                Course_lib_list[index-(_page-1)*10][0]=Course_lib[index]['fields']
+                Course_lib_list[index-(_page-1)*10][1]=Course_lib[index]['pk']
+                print(Course_lib_list[index-(_page-1)*10])
+                print(Course_lib[index]['pk'])
+                print(Course_lib_list[index-(_page-1)*10][1])
+                print("-----------")
+        Course_lib_json = json.dumps(Course_lib_list)
+        print(Course_lib_json)
+        print(type(Course_lib_json))
+        return HttpResponse(content=Course_lib_json,content_type='application/json')
         # 我该如何返回数据？
         # 问题1   我记录的是每节课的数据所以如果我想导出所有课程的数据会存在重复数据
         # 解决方法 1.建立一个新数组（表），只导前三项（实时性弱）
         #        2.数据库一对多，一个数据库存课程，然后对应着一个表存时间(实时性强)
         #        3.把coursetime和couseweek整合成多维数组的形式直接存放.(一劳永逸)
         # 实例化    数据库 课程表 时间表
+    elif _cont==1:
+        if _coursename==None or _teachername==None:
+            error = {
+                "code": 4009,
+                "message": "Begin Data Error"
+            }
+            error = json.dumps(error)
+            print(error)
+            return HttpResponse(content=error, content_type='application/json')
+        Course_lib = serializers.serialize("json", Course.objects.filter(CourseName__icontains=_coursename,CourseTeacher__icontains=_teachername))
+        print(Course_lib)
+        print("-----")
+        Course_lib = json.loads(Course_lib)
+        Course_lib_list = [[] for k in range(10)]
+        for index in range((_page - 1) * 10, (_page) * 10):
+            if len(Course_lib) > index:
+                print(index)
+                Course_lib_list[index - (_page - 1) * 10] = Course_lib[index]['fields']
+                Course_lib_list[index-(_page-1)*10][1]=Course_lib[index]['pk']
+                print(Course_lib_list[index - (_page - 1) * 10])
+                print("-----------")
+        Course_lib_json = json.dumps(Course_lib_list)
+        print(Course_lib_json)
+        print(type(Course_lib_json))
+        return HttpResponse(content=Course_lib_json, content_type='application/json')
+    elif _cont == 2:
+        _toweek= json_param.get('toweek')
+        # _coursename = json_param.get('coursename')
+        # _teachername = json_param.get('teachername')
+        # _cont = json_param.get("cont")
+        # _page = json_param.get("page")
+        # 请求课程数据
+        if _toweek==None and isinstance(_toweek,int):
+            error = {
+                "code": 4009,
+                "message": "Begin Data Error"
+            }
+            error = json.dumps(error)
+            print(error)
+            return HttpResponse(content=error, content_type='application/json')
 
     # 节流查询数据
     # elif _cont==1:
