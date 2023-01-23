@@ -1,4 +1,3 @@
-import ast
 import datetime
 import json
 from django.contrib.sites import requests
@@ -87,7 +86,7 @@ def get_student_info(request):
     try:
         req = session.get(url, params=params, timeout=5, headers=HEADERS)
     except:
-        print(req.text)
+
         print("session对话错误")
         error = {
             "code": 4001,
@@ -206,6 +205,7 @@ def get_class_info(request):
         return HttpResponse(content="[]", content_type='application/json')
 
     # 将爬取到的数据转成前端需要的数据，格式转换
+    tablesame = [[-1 for j in range(2)] for k in range(35)]
     # color随机选择颜色
     tablecolor = ["#ebb5cc", "#b2c196", "#edd492", "#fee5a3"
         , "#e9daa3", "#ea7375", "#a286ea", "#776fdf", "#7bc6e6"
@@ -220,8 +220,7 @@ def get_class_info(request):
     # tablecolor = ["#D70015", "#C93400", "#B25000", "#248A3D", "#0071A4"
     #     , "#0040DD", "#3634A3", "#8944AB", "#D30F45"]
     # 分割将class转换成数组返回
-    table = [[[[] for j in range(5)] for i in range(5)] for k in range(7)]
-    tablesame = [[-1 for j in range(2)] for k in range(35)]
+    table = [[[[] for j in range(5)] for i in range(5)] for k in range(7)]#课程
     flag_i_color = 0  # 进行表的比对，如果same表存在就直接用颜色，不存在就给个新颜色，新颜色用到的
     for newtable in table_ord:
         get_kcsj = newtable.get("kcsj")
@@ -249,18 +248,18 @@ def get_class_info(request):
         #     weekstring=weekstring+"["+end_fg[0]+","+end_fg[1]+"],"
         # weekstring = weekstring +  "]"
 
-        Courseresult = Course.objects.filter(CourseName=get_kcmc,CourseTeacher=get_jsxm,CoursePlace=get_jsmc)
+        Courseresult = Course.objects.filter(CourseName=get_kcmc,CourseTeacher=get_jsxm)
         # 所有东西都存储说明我存储了课，这样不会有重复的课
         # 我没有存储这个课
         if not Courseresult.exists():
-            NewCourse = Course.objects.create(CourseName=get_kcmc,CourseTeacher=get_jsxm,CoursePlace=get_jsmc)
+            NewCourse = Course.objects.create(CourseName=get_kcmc,CourseTeacher=get_jsxm)
             NewCourse.save()
-            NewCourseTime = CourseTime.objects.create(CourseTime=get_kcsj, CourseWeek=get_kkzc, CourseId=NewCourse)
+            NewCourseTime = CourseTime.objects.create(CourseTime=get_kcsj, CourseWeek=get_kkzc, CourseId=NewCourse,CoursePlace=get_jsmc)
             NewCourseTime.save()
         # 我已经存储这个课
         else:
             # 现在看看有没有存储这个课的时间
-            Course_result = Course.objects.get(CourseName=get_kcmc,CourseTeacher=get_jsxm,CoursePlace=get_jsmc)
+            Course_result = Course.objects.get(CourseName=get_kcmc,CourseTeacher=get_jsxm)
             CourseTimeresult=Course_result.coursetime_set.all().values_list('CourseTime')
             flag_time=True#没有相等的
             for time_i in CourseTimeresult:
@@ -269,7 +268,7 @@ def get_class_info(request):
                     break
             # 不存在相等的时间，我要不要记录星期有没有时间相同星期不同？除非后期调课，原来的课调走后面的课然后调到相同时间这时会漏读多读。
             if flag_time==True:
-                NewCourseTime = CourseTime.objects.create(CourseTime=get_kcsj, CourseWeek=get_kkzc, CourseId=Course_result)
+                NewCourseTime = CourseTime.objects.create(CourseTime=get_kcsj, CourseWeek=get_kkzc, CourseId=Course_result,CoursePlace=get_jsmc)
                 NewCourseTime.save()
 
 
@@ -946,37 +945,18 @@ def get_courselib(request):
     postbody = request.body
     print(postbody)
     json_param = json.loads(postbody.decode())
-    _coursename = json_param.get('coursename')
-    _teachername = json_param.get('teachername')
     _cont = json_param.get("cont")
     _page = json_param.get("page")
     # 节流请求课程表数据
+    # 我该如何返回数据？
+    # 问题1   我记录的是每节课的数据所以如果我想导出所有课程的数据会存在重复数据
+    # 解决方法 1.建立一个新数组（表），只导前三项（实时性弱）
+    #        2.数据库一对多，一个数据库存课程，然后对应着一个表存时间(实时性强)
+    #        3.把coursetime和couseweek整合成多维数组的形式直接存放.(一劳永逸)
+    # 实例化    数据库 课程表 时间表
     if _cont==0:
-        Course_lib= serializers.serialize("json",Course.objects.all())
-        print(Course_lib)
-        print("-----")
-        Course_lib= json.loads(Course_lib)
-        Course_lib_list = [[[],[]] for k in range(10)]
-        for index in range((_page-1)*10,(_page)*10):
-            if len(Course_lib)>index:
-                print(index)
-                Course_lib_list[index-(_page-1)*10][0]=Course_lib[index]['fields']
-                Course_lib_list[index-(_page-1)*10][1]=Course_lib[index]['pk']
-                print(Course_lib_list[index-(_page-1)*10])
-                print(Course_lib[index]['pk'])
-                print(Course_lib_list[index-(_page-1)*10][1])
-                print("-----------")
-        Course_lib_json = json.dumps(Course_lib_list)
-        print(Course_lib_json)
-        print(type(Course_lib_json))
-        return HttpResponse(content=Course_lib_json,content_type='application/json')
-        # 我该如何返回数据？
-        # 问题1   我记录的是每节课的数据所以如果我想导出所有课程的数据会存在重复数据
-        # 解决方法 1.建立一个新数组（表），只导前三项（实时性弱）
-        #        2.数据库一对多，一个数据库存课程，然后对应着一个表存时间(实时性强)
-        #        3.把coursetime和couseweek整合成多维数组的形式直接存放.(一劳永逸)
-        # 实例化    数据库 课程表 时间表
-    elif _cont==1:
+        _coursename = json_param.get('coursename')
+        _teachername = json_param.get('teachername')
         if _coursename==None or _teachername==None:
             error = {
                 "code": 4009,
@@ -994,21 +974,22 @@ def get_courselib(request):
             if len(Course_lib) > index:
                 print(index)
                 Course_lib_list[index - (_page - 1) * 10] = Course_lib[index]['fields']
-                Course_lib_list[index-(_page-1)*10][1]=Course_lib[index]['pk']
+                Course_lib_list[index-(_page-1)*10]["id"]=Course_lib[index]['pk']
                 print(Course_lib_list[index - (_page - 1) * 10])
                 print("-----------")
         Course_lib_json = json.dumps(Course_lib_list)
         print(Course_lib_json)
         print(type(Course_lib_json))
         return HttpResponse(content=Course_lib_json, content_type='application/json')
-    elif _cont == 2:
+    elif _cont == 1:
         _toweek= json_param.get('toweek')
         # _coursename = json_param.get('coursename')
         # _teachername = json_param.get('teachername')
         # _cont = json_param.get("cont")
         # _page = json_param.get("page")
-        # 请求课程数据
-        if _toweek==None and isinstance(_toweek,int):
+        # 判断是否传入周数
+        print(isinstance(_toweek,int))
+        if _toweek==None and not isinstance(_toweek,int):
             error = {
                 "code": 4009,
                 "message": "Begin Data Error"
@@ -1016,6 +997,74 @@ def get_courselib(request):
             error = json.dumps(error)
             print(error)
             return HttpResponse(content=error, content_type='application/json')
+        # 正式请求，请求课程数据，要求给课程ID；然后我给出详细的数据，包括课程名称，教室，老师名字，课程时间；
+        _id = json_param.get("id")
+        try:
+            Course_id=Course.objects.get(id=_id)
+        except:
+            error = {
+                "code": 4009,
+                "message": "Begin Data Error"
+            }
+            error = json.dumps(error)
+            print(error)
+            return HttpResponse(content=error, content_type='application/json')
+        print(Course_id)
+        Course_detail = Course_id.coursetime_set.all().values_list('CourseWeek', 'CourseTime',"CoursePlace")
+        print(len(Course_detail))
+        print(Course_detail[0][1])
+        Course_timetable = [[[[] for j in range(5)] for i in range(5)] for k in range(7)]  # 课程
+        print("xxxxxxxxxxxxxxxxxxxxxxxxxx")
+        for index in range(len(Course_detail)):#dh_fg课程为一个数组,里面存储的两个时间
+
+            dh_fg=Course_detail[index][0].split(',')#存储的几个星期时间
+
+            end_fg = [[[],[]] for k in range(len(dh_fg))]#第一个是几个时间，第二个是开始时间和结束时间
+            get_time = Course_detail[index][1]
+            get_place=Course_detail[index][2]
+            week_time = int(get_time[3] + get_time[4])
+            week_time = int(week_time/2) - 1 #节数
+            print("_______sdsadsadsad___________")
+            for hg_i in range(len(dh_fg)):#end_fg课程为一个二维数组，
+                process_data=dh_fg[hg_i].split('-')
+                print(Course_id.CourseName)
+                print(get_place)
+                print(Course_id.CourseTeacher)
+                if len(process_data)==2:
+                    end_fg[hg_i][0] = int(process_data[0])
+                    end_fg[hg_i][1] = int(process_data[1])
+                    # 判断本周有没有这个课程
+                    if end_fg[hg_i][0] <= _toweek and end_fg[hg_i][1] >= _toweek:
+                        kcsj_day = int(get_time[0]) - 1
+                        print(kcsj_day)
+                        print(week_time)
+                        # 课程名称
+                        Course_timetable[kcsj_day][week_time][0] = Course_id.CourseName
+                        # 上课地址
+                        Course_timetable[kcsj_day][week_time][1] = get_place
+                        # 老师名称
+                        Course_timetable[kcsj_day][week_time][2] = Course_id.CourseTeacher
+                elif len(process_data)==1:
+                    end_fg[hg_i][0] = int(process_data[0])
+                    # 判断本周有没有这个课程
+                    if end_fg[hg_i][0] == _toweek :
+                        kcsj_day = int(get_time[0]) - 1
+                        # 课程名称
+                        Course_timetable[kcsj_day][week_time][0] = Course_id.CourseName
+                        # 上课地址
+                        Course_timetable[kcsj_day][week_time][1] = get_place
+                        # 老师名称
+                        Course_timetable[kcsj_day][week_time][2] = Course_id.CourseTeacher
+
+        str_json = json.dumps(Course_timetable, ensure_ascii=False, indent=2)
+        # print(str_json)
+        return HttpResponse(content=str_json, content_type='application/json')
+
+    # >> > coursedetil = course.coursetime_set.all().values_list('CourseWeek', 'CourseTime')
+    # >> > coursedetil
+    # < QuerySet[('2-9', '20304')] >
+    # >> > coursedetil[0]
+    # ('2-9', '20304')
 
     # 节流查询数据
     # elif _cont==1:

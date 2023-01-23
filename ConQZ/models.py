@@ -26,12 +26,12 @@ class LikesInfo(models.Model):
 
 class Course(models.Model):
    CourseName=models.CharField('课程名称',max_length=100,default='')
-   CoursePlace=models.CharField('上课地点',max_length=100,default='')
    CourseTeacher=models.CharField('教师名称',max_length=20,default='')
 
 class CourseTime(models.Model):
     CourseId = models.ForeignKey(Course, verbose_name='课程编号', on_delete=models.CASCADE)
     CourseTime=models.CharField('上课时间',max_length=20,default='')
     CourseWeek=models.CharField('上课周数',max_length=20,default='')
+    CoursePlace = models.CharField('上课地点', max_length=100, default='')
     class Meta:
         ordering = ('CourseId_id',)
