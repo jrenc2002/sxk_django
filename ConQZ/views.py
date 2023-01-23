@@ -937,8 +937,11 @@ def get_phonebook_info(request):
 
     return HttpResponse(content=content, content_type='application/json')
 #小科食物库
+
 #小科备忘录
+
 #小科经验包
+
 #小科课程库
 def get_courselib(request):
     # 输出的时候要输出id，然后我们可以通过id去反向查询。
@@ -1070,6 +1073,102 @@ def get_courselib(request):
     # elif _cont==1:
     #
     #     return HttpResponse(content=req, content_type='application/json')
-def process_coureselib_data():
-    breakpoint()
+# def process_coureselib_data():
+def get_croom_course(request):
+    postbody = request.body
+    print(postbody)
+    json_param = json.loads(postbody.decode())
+    _cont = json_param.get("cont")
+    _page = json_param.get("page")
+    # 返回所有的教室
+    if _cont==0:
+        Class_ord=CourseTime.objects.all().distinct().values_list("CoursePlace")
+        # 如何区分教室顺序？还有空教室渲染问题。这个教室部分之后搞。
+        Class_list = [[] for k in range(len(Class_ord))]
+        for index in range(len(Class_ord)):
+            Class_list[index]=Class_ord[index][0]
+        Course_lib_json = json.dumps(Course_lib_list)
+        print(Course_lib_json)
+        print(type(Course_lib_json))
+        return HttpResponse(content=Course_lib_json, content_type='application/json')
+    # 返回教室课表
+    elif _cont == 1:
+        _toweek= json_param.get('toweek')
+        # _coursename = json_param.get('coursename')
+        # _teachername = json_param.get('teachername')
+        # _cont = json_param.get("cont")
+        # _page = json_param.get("page")
+        # 判断是否传入周数
+        print(isinstance(_toweek,int))
+        if _toweek==None and not isinstance(_toweek,int):
+            error = {
+                "code": 4009,
+                "message": "Begin Data Error"
+            }
+            error = json.dumps(error)
+            print(error)
+            return HttpResponse(content=error, content_type='application/json')
+        # 正式请求，请求课程数据，要求给课程ID；然后我给出详细的数据，包括课程名称，教室，老师名字，课程时间；
+        _id = json_param.get("id")
+        try:
+            Course_id=Course.objects.get(id=_id)
+        except:
+            error = {
+                "code": 4009,
+                "message": "Begin Data Error"
+            }
+            error = json.dumps(error)
+            print(error)
+            return HttpResponse(content=error, content_type='application/json')
+        print(Course_id)
+        Course_detail = Course_id.coursetime_set.all().values_list('CourseWeek', 'CourseTime',"CoursePlace")
+        print(len(Course_detail))
+        print(Course_detail[0][1])
+        Course_timetable = [[[[] for j in range(5)] for i in range(5)] for k in range(7)]  # 课程
+        print("xxxxxxxxxxxxxxxxxxxxxxxxxx")
+        for index in range(len(Course_detail)):#dh_fg课程为一个数组,里面存储的两个时间
 
+            dh_fg=Course_detail[index][0].split(',')#存储的几个星期时间
+
+            end_fg = [[[],[]] for k in range(len(dh_fg))]#第一个是几个时间，第二个是开始时间和结束时间
+            get_time = Course_detail[index][1]
+            get_place=Course_detail[index][2]
+            week_time = int(get_time[3] + get_time[4])
+            week_time = int(week_time/2) - 1 #节数
+            print("_______sdsadsadsad___________")
+            for hg_i in range(len(dh_fg)):#end_fg课程为一个二维数组，
+                process_data=dh_fg[hg_i].split('-')
+                print(Course_id.CourseName)
+                print(get_place)
+                print(Course_id.CourseTeacher)
+                if len(process_data)==2:
+                    end_fg[hg_i][0] = int(process_data[0])
+                    end_fg[hg_i][1] = int(process_data[1])
+                    # 判断本周有没有这个课程
+                    if end_fg[hg_i][0] <= _toweek and end_fg[hg_i][1] >= _toweek:
+                        kcsj_day = int(get_time[0]) - 1
+                        print(kcsj_day)
+                        print(week_time)
+                        # 课程名称
+                        Course_timetable[kcsj_day][week_time][0] = Course_id.CourseName
+                        # 上课地址
+                        Course_timetable[kcsj_day][week_time][1] = get_place
+                        # 老师名称
+                        Course_timetable[kcsj_day][week_time][2] = Course_id.CourseTeacher
+                elif len(process_data)==1:
+                    end_fg[hg_i][0] = int(process_data[0])
+                    # 判断本周有没有这个课程
+                    if end_fg[hg_i][0] == _toweek :
+                        kcsj_day = int(get_time[0]) - 1
+                        # 课程名称
+                        Course_timetable[kcsj_day][week_time][0] = Course_id.CourseName
+                        # 上课地址
+                        Course_timetable[kcsj_day][week_time][1] = get_place
+                        # 老师名称
+                        Course_timetable[kcsj_day][week_time][2] = Course_id.CourseTeacher
+
+        str_json = json.dumps(Course_timetable, ensure_ascii=False, indent=2)
+        # print(str_json)
+        return HttpResponse(content=str_json, content_type='application/json')
+# 如何区分教学楼和教室？
+# 教室的表现形式是什么？
