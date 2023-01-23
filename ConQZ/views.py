@@ -1171,4 +1171,4 @@ def get_croom_course(request):
         # print(str_json)
         return HttpResponse(content=str_json, content_type='application/json')
 # 如何区分教学楼和教室？
-# 教室的表现形式是什么？
+# 教室的表现形式是什么
