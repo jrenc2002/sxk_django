@@ -949,7 +949,6 @@ def get_courselib(request):
     print(postbody)
     json_param = json.loads(postbody.decode())
     _cont = json_param.get("cont")
-    _page = json_param.get("page")
     # 节流请求课程表数据
     # 我该如何返回数据？
     # 问题1   我记录的是每节课的数据所以如果我想导出所有课程的数据会存在重复数据
@@ -958,6 +957,8 @@ def get_courselib(request):
     #        3.把coursetime和couseweek整合成多维数组的形式直接存放.(一劳永逸)
     # 实例化    数据库 课程表 时间表
     if _cont==0:
+
+        _page = json_param.get("page")
         _coursename = json_param.get('coursename')
         _teachername = json_param.get('teachername')
         if _coursename==None or _teachername==None:
@@ -991,8 +992,9 @@ def get_courselib(request):
         # _cont = json_param.get("cont")
         # _page = json_param.get("page")
         # 判断是否传入周数
-        print(isinstance(_toweek,int))
+        _toweek=_toweek
         if _toweek==None and not isinstance(_toweek,int):
+            print("2311313")
             error = {
                 "code": 4009,
                 "message": "Begin Data Error"
@@ -1005,6 +1007,7 @@ def get_courselib(request):
         try:
             Course_id=Course.objects.get(id=_id)
         except:
+            print("Ssdas")
             error = {
                 "code": 4009,
                 "message": "Begin Data Error"
@@ -1019,9 +1022,7 @@ def get_courselib(request):
         Course_timetable = [[[[] for j in range(5)] for i in range(5)] for k in range(7)]  # 课程
         print("xxxxxxxxxxxxxxxxxxxxxxxxxx")
         for index in range(len(Course_detail)):#dh_fg课程为一个数组,里面存储的两个时间
-
             dh_fg=Course_detail[index][0].split(',')#存储的几个星期时间
-
             end_fg = [[[],[]] for k in range(len(dh_fg))]#第一个是几个时间，第二个是开始时间和结束时间
             get_time = Course_detail[index][1]
             get_place=Course_detail[index][2]
@@ -1047,6 +1048,8 @@ def get_courselib(request):
                         Course_timetable[kcsj_day][week_time][1] = get_place
                         # 老师名称
                         Course_timetable[kcsj_day][week_time][2] = Course_id.CourseTeacher
+                        #存放周数
+                        Course_timetable[kcsj_day][week_time][3] = Course_detail[index][0]
                 elif len(process_data)==1:
                     end_fg[hg_i][0] = int(process_data[0])
                     # 判断本周有没有这个课程
@@ -1058,6 +1061,8 @@ def get_courselib(request):
                         Course_timetable[kcsj_day][week_time][1] = get_place
                         # 老师名称
                         Course_timetable[kcsj_day][week_time][2] = Course_id.CourseTeacher
+                        #存放周数
+                        Course_timetable[kcsj_day][week_time][3] = Course_detail[index][0]
 
         str_json = json.dumps(Course_timetable, ensure_ascii=False, indent=2)
         # print(str_json)
