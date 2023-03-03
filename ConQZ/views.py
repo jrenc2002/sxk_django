@@ -35,7 +35,16 @@ def get_login_info(request):
     error = json.dumps(error)
     global HEADERS, url
     session = requests.Session()
-    req = session.get(url, params=params, timeout=5, headers=HEADERS)
+    try:
+        req = session.get(url, params=params, timeout=5, headers=HEADERS)
+    except:
+        print("session对话错误")
+        error = {
+            "code": 4001,
+            "message": "Session Error"
+        }
+        error = json.dumps(error)
+        return HttpResponse(content=error, content_type='application/json')
     s = json.loads(req.text)
     print(s["flag"])
     if s["flag"] != "1":
@@ -86,7 +95,6 @@ def get_student_info(request):
     try:
         req = session.get(url, params=params, timeout=5, headers=HEADERS)
     except:
-
         print("session对话错误")
         error = {
             "code": 4001,
@@ -142,7 +150,16 @@ def get_current_time(request):
         "method": "getCurrentTime",
         "currDate": datetime.datetime.now().strftime("%Y-%m-%d")
     }
-    req = session.get(url, params=params, timeout=5, headers=HEADERS)
+    try:
+        req = session.get(url, params=params, timeout=5, headers=HEADERS)
+    except:
+        print("session对话错误")
+        error = {
+            "code": 4001,
+            "message": "Session Error"
+        }
+        error = json.dumps(error)
+        return HttpResponse(content=error, content_type='application/json')
     return HttpResponse(content=req,content_type='application/json')
 def get_class_info(request):
     global url,HEADERS
@@ -168,7 +185,16 @@ def get_class_info(request):
         "method": "getCurrentTime",
         "currDate": datetime.datetime.now().strftime("%Y-%m-%d")
     }
-    req = session.get(url, params=params, timeout=5, headers=HEADERS)
+    try:
+        req = session.get(url, params=params, timeout=5, headers=HEADERS)
+    except:
+        print("session对话错误")
+        error = {
+            "code": 4001,
+            "message": "Session Error"
+        }
+        error = json.dumps(error)
+        return HttpResponse(content=error, content_type='application/json')
     s = json.loads(req.text)
     try:
         if s["zc"]==None:
@@ -333,7 +359,16 @@ def get_classroom_info(request):
         "time": datetime.datetime.now().strftime("%Y-%m-%d"),
         "idleTime": idleTime
     }
-    req = session.get(url, params=params, timeout=5, headers=HEADERS)
+    try:
+        req = session.get(url, params=params, timeout=5, headers=HEADERS)
+    except:
+        print("session对话错误")
+        error = {
+            "code": 4001,
+            "message": "Session Error"
+        }
+        error = json.dumps(error)
+        return HttpResponse(content=error, content_type='application/json')
     return HttpResponse(content=req,content_type='application/json')
 def get_grade_info(request):  # put application's code here
 
@@ -364,7 +399,16 @@ def get_grade_info(request):  # put application's code here
         "xh": _account,
         "xnxqid": sy
     }
-    req = session.get(url, params=params, timeout=5, headers=HEADERS)
+    try:
+        req = session.get(url, params=params, timeout=5, headers=HEADERS)
+    except:
+        print("session对话错误")
+        error = {
+            "code": 4001,
+            "message": "Session Error"
+        }
+        error = json.dumps(error)
+        return HttpResponse(content=error, content_type='application/json')
     return HttpResponse(content=req, content_type='application/json')
 def get_exam_info(request):  # put application's code here
     postbody = request.body
@@ -390,7 +434,16 @@ def get_exam_info(request):  # put application's code here
         "method": "getKscx",
         "xh": _account,
     }
-    req = session.get(url, params=params, timeout=5, headers=HEADERS)
+    try:
+        req = session.get(url, params=params, timeout=5, headers=HEADERS)
+    except:
+        print("session对话错误")
+        error = {
+            "code": 4001,
+            "message": "Session Error"
+        }
+        error = json.dumps(error)
+        return HttpResponse(content=error, content_type='application/json')
     return HttpResponse(content=req, content_type='application/json')
 #共享课表/成绩路由
 def reply_share_info(request):
@@ -828,7 +881,16 @@ def get_share_info(request):
             "zc": s["zc"] if zc == -1 else zc,
             "xh": shareaccount
         }
-        req = session.get(url, params=params, timeout=5, headers=HEADERS)
+        try:
+            req = session.get(url, params=params, timeout=5, headers=HEADERS)
+        except:
+            print("session对话错误")
+            error = {
+                "code": 4001,
+                "message": "Session Error"
+            }
+            error = json.dumps(error)
+            return HttpResponse(content=error, content_type='application/json')
         print(req)
 
         # 将爬取到的数据转成前端需要的数据，格式转换
@@ -909,7 +971,16 @@ def get_share_info(request):
             "pwd": sharepassword
         }
         session = requests.Session()
-        req = session.get(url, params=params, timeout=5, headers=HEADERS)
+        try:
+            req = session.get(url, params=params, timeout=5, headers=HEADERS)
+        except:
+            print("session对话错误")
+            error = {
+                "code": 4001,
+                "message": "Session Error"
+            }
+            error = json.dumps(error)
+            return HttpResponse(content=error, content_type='application/json')
         s = json.loads(req.text)
         if s["flag"] != "1":
             error = {
@@ -927,13 +998,60 @@ def get_share_info(request):
             "xh": shareaccount,
             "xnxqid": sy
         }
-        req = session.get(url, params=params, timeout=5, headers=HEADERS)
+        try:
+            req = session.get(url, params=params, timeout=5, headers=HEADERS)
+        except:
+            print("session对话错误")
+            error = {
+                "code": 4001,
+                "message": "Session Error"
+            }
+            error = json.dumps(error)
+            return HttpResponse(content=error, content_type='application/json')
         return HttpResponse(content=req, content_type='application/json')
 #小科通讯录
 def get_phonebook_info(request):
+    postbody = request.body
+    print(postbody)
+    json_param = json.loads(postbody.decode())
     content = serializers.serialize("json", LikesInfo.objects.all())
     print(content)
     print(type(content))
+    #________________________
+    # 输出的时候要输出id，然后我们可以通过id去反向查询。
+    # 节流请求课程表数据
+    # 我该如何返回数据？
+    # 问题1   我记录的是每节课的数据所以如果我想导出所有课程的数据会存在重复数据
+    # 解决方法 1.建立一个新数组（表），只导前三项（实时性弱）
+    #        2.数据库一对多，一个数据库存课程，然后对应着一个表存时间(实时性强)
+    #        3.把coursetime和couseweek整合成多维数组的形式直接存放.(一劳永逸)
+    # 实例化    数据库 课程表 时间表
+    _page = json_param.get("page")
+    _likename = json_param.get('likename')
+    if _likename==None or _page==None:
+        error = {
+            "code": 4009,
+            "message": "Begin Data Error"
+        }
+        error = json.dumps(error)
+        print(error)
+        return HttpResponse(content=error, content_type='application/json')
+    Course_lib = serializers.serialize("json", LikesInfo.objects.filter(Groupname__icontains=_likename))
+    print(Course_lib)
+    print("-----")
+    Course_lib = json.loads(Course_lib)
+    Course_lib_list = [[] for k in range(5)]
+    for index in range((_page - 1) * 5, (_page) * 5):
+        if len(Course_lib) > index:
+            print(index)
+            Course_lib_list[index - (_page - 1) * 5] = Course_lib[index]['fields']
+            Course_lib_list[index-(_page-1)*5]["id"]=Course_lib[index]['pk']
+            print(Course_lib_list[index - (_page - 1) * 5])
+            print("-----------")
+    Course_lib_json = json.dumps(Course_lib_list)
+    print(Course_lib_json)
+    print(type(Course_lib_json))
+    return HttpResponse(content=Course_lib_json, content_type='application/json')
 
     return HttpResponse(content=content, content_type='application/json')
 #小科食物库
@@ -1027,6 +1145,7 @@ def get_courselib(request):
             get_time = Course_detail[index][1]
             get_place=Course_detail[index][2]
             week_time = int(get_time[3] + get_time[4])
+            print(week_time)
             week_time = int(week_time/2) - 1 #节数
             print("_______sdsadsadsad___________")
             for hg_i in range(len(dh_fg)):#end_fg课程为一个二维数组，
