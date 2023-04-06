@@ -21,6 +21,7 @@ def get_login_info(request):
     # 读取数据
     postbody=request.body
     json_param = json.loads(postbody.decode())
+    print(json_param)
     _account = json_param.get('account')
     _password = json_param.get('password')
     params = {
