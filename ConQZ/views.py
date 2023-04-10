@@ -2,9 +2,12 @@ import datetime
 import json
 from django.contrib.sites import requests
 from django.core import serializers
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 import requests as requests
+
+
 from ConQZ.models import User,Share,LikesInfo,Course,CourseTime
+
 
 from django.shortcuts import render
 
@@ -17,117 +20,179 @@ HEADERS = {
    "Cache-control": "max-age=0"
 }
 url = "http://jwgl.sdust.edu.cn/app.do"
+
 def get_login_info(request):
-    # 读取数据
-    postbody=request.body
-    json_param = json.loads(postbody.decode())
-    print(json_param)
-    _account = json_param.get('account')
-    _password = json_param.get('password')
+    # 检验POST
+    if request.method != 'POST':
+        error = {
+            "code": 4000,
+            "message": "Invalid Request Method"
+        }
+        return HttpResponse(content=json.dumps(error), content_type='application/json', status=400)
+
+    # 读取POST请求的数据
+    try:
+        post_data = json.loads(request.body.decode())
+    except json.JSONDecodeError:
+        error = {
+            "code": 4001,
+            "message": "Invalid Request Body"
+        }
+        return HttpResponse(content=json.dumps(error), content_type='application/json', status=400)
+    account = post_data.get('account')
+    password = post_data.get('password')
+    if not all([account, password]):
+        error = {
+            "code": 4002,
+            "message": "Missing Account or Password"
+        }
+        return HttpResponse(content=json.dumps(error), content_type='application/json', status=400)
+
+    #构造请求参数
     params = {
         "method": "authUser",
-        "xh": _account,
-        "pwd": _password
+        "xh": account,
+        "pwd": password
     }
-    error = {
-        "code": 4000,
-        "message": "Invalid Login"
-    }
-    error = json.dumps(error)
     global HEADERS, url
+
+
     session = requests.Session()
     try:
         req = session.get(url, params=params, timeout=5, headers=HEADERS)
-    except:
-        print("session对话错误")
+        s = req.json()
+    except requests.exceptions.RequestException:
+        # 如果请求出错，返回4001错误
+        error = {"code": 4001, "message": "Session Error"}
+        return JsonResponse(error, status=400)
+
+    # 检查是否登录成功
+    if s.get("flag") != "1":
+        # 如果登录不成功，返回400错误
+        error = {"code": 4000, "message": "Invalid Login"}
+        return JsonResponse(error, status=400)
+
+    # 保存cookie
+
+    cookies_dict = requests.utils.dict_from_cookiejar(session.cookies)
+    cookies_str = json.dumps(cookies_dict)
+    session_token = s.get("token")
+
+    # 返回cookie和token
+    response_data = {
+        "cookies": cookies_str,
+        "token": session_token
+    }
+    return HttpResponse(content=json.dumps(response_data), content_type='application/json')
+def get_student_info(request):
+
+    # 解析请求体
+    if request.method != 'POST':
         error = {
-            "code": 4001,
-            "message": "Session Error"
+            "code": 4003,
+            "message": "Invalid request method"
         }
         error = json.dumps(error)
         return HttpResponse(content=error, content_type='application/json')
-    s = json.loads(req.text)
-    print(s["flag"])
-    if s["flag"] != "1":
-        return HttpResponse(content=error,content_type='application/json')
-    HEADERS["token"] = s["token"]
-    global cookies
-    cookies = session.cookies
-    print(session.cookies)
 
     try:
-        cookies_dict = requests.utils.dict_from_cookiejar(cookies)
-    except:
+        json_param = json.loads(request.body.decode())
+        _account = json_param.get('account')
+        _password = json_param.get('password')
+        cookiesstr = json_param.get("cookiesstr")
+        token=json_param.get("token")
+    except json.decoder.JSONDecodeError:
         error = {
-            "code": 4008,
-            "message": "Login Error"
+            "code": 4000,
+            "message": "Invalid request body"
         }
         error = json.dumps(error)
-        print(error)
         return HttpResponse(content=error, content_type='application/json')
-    cookies_str = json.dumps(cookies_dict)
-    # '{"JSESSIONID": "3474AAED60477A63776B77CC2B82E5FB"}'
-    return  HttpResponse(content=cookies_str,content_type='application/json')
-def get_student_info(request):
-    postbody=request.body
-    print(postbody)
-    json_param = json.loads(postbody.decode())
-    _account = json_param.get('account')
-    _password = json_param.get('password')
-    cookiesstr = json_param.get("cookiesstr")
-    print(cookiesstr)
+
+    # 验证登录信息
     try:
         cookies = requests.utils.cookiejar_from_dict(cookiesstr)
+
     except:
         error = {
             "code": 4008,
             "message": "Login Error"
         }
         error = json.dumps(error)
-        print(error)
         return HttpResponse(content=error, content_type='application/json')
+
     session = requests.Session()
     session.cookies = cookies
-    global HEADERS,url
+
     params = {
-            "method": "getUserInfo",
-            "xh": _account
-        }
+        "method": "getUserInfo",
+        "xh": _account
+    }
+    global HEADERS
+
+    HEADERS["token"] = token
+    print(HEADERS)
+
     try:
         req = session.get(url, params=params, timeout=5, headers=HEADERS)
     except:
-        print("session对话错误")
         error = {
             "code": 4001,
             "message": "Session Error"
         }
         error = json.dumps(error)
         return HttpResponse(content=error, content_type='application/json')
-    s = json.loads(req.text)
-    print(User.objects.filter(Snumber=_account))
-    Userresult=User.objects.filter(Snumber=_account)
-    print("Userresult.exists()=",Userresult.exists())
-    #做一个密码匹配
-    if Userresult.exists():
-        password = User.objects.filter(Snumber=_account).values('PasswordQZ')
-        password = password[0]['PasswordQZ']
-        if password != _password:
-            user_obj = User.objects.get(Snumber=_account)
+
+    data = json.loads(req.text)
+    if data.get('token') == '-1':
+        error = {
+            "code": 4009,
+            "message": "Token=-1"
+        }
+        error = json.dumps(error)
+        return HttpResponse(content=error, content_type='application/json')
+    elif req.status_code != 200:
+        error = {
+            "code": 4004,
+            "message": "Bad Request"
+        }
+        error = json.dumps(error)
+        return HttpResponse(content=error, content_type='application/json')
+
+    print(req.text)
+    # 更新用户信息
+    try:
+        user_obj = User.objects.get(Snumber=_account)
+    except User.DoesNotExist:
+       user_obj = User.objects.create(Snumber=int(data.get('xh', '')), Name=data.get('xm', ''), PasswordQZ=_password,
+                                           Classname=data.get('bj', ''), Majorname=data.get('zymc', ''), Collegename=data.get('yxmc', ''),
+                                           Enteryear=int(data.get('rxnf', '')), Gradenumber=int(data.get('usertype', '')))
+       user_obj.save()
+       print("对新用户进行了创建用户表操作")
+    else:
+        if user_obj.PasswordQZ != _password:
             user_obj.PasswordQZ = _password
             user_obj.save()
             print("对新用户进行了更新密码的操作")
-    if not Userresult.exists():
-        user_obj =User.objects.create(Snumber=int(s['xh']),Name=s['xm'],PasswordQZ=_password,
-                             Classname=s['bj'],Majorname=s['zymc'],Collegename=s['yxmc'],Enteryear=int(s['rxnf']),Gradenumber=int(s['usertype']))
-        user_obj.save()
-        print("对新用户进行了创建用户表操作")
-    Shareresult = Share.objects.filter(Usernumber_id=_account)
-    print("Shareresult.exists()=",Shareresult.exists())
-    if not Shareresult.exists():
-        share_obj = Share.objects.create(Usernumber_id=_account)
-        share_obj.save()
+
+    share_obj, created = Share.objects.get_or_create(Usernumber_id=_account)
+    # 创建共享表
+    if created:
         print("对新用户进行了创建共享表操作")
-    return HttpResponse(content=req,content_type='application/json')
+    else:
+        print("共享表已存在")
+
+    if req.status_code == 200:
+        data = json.loads(req.text)
+        return JsonResponse(data, safe=False)
+    else:
+        error = {
+            "code": 4004,
+            "message": "Bad Request"
+        }
+        error = json.dumps(error)
+        return HttpResponse(content=error, content_type='application/json')
+
 def get_current_time(request):
     postbody=request.body
     json_param = json.loads(postbody.decode())
@@ -1199,101 +1264,103 @@ def get_courselib(request):
     #
     #     return HttpResponse(content=req, content_type='application/json')
 # def process_coureselib_data():
-def get_croom_course(request):
-    postbody = request.body
-    print(postbody)
-    json_param = json.loads(postbody.decode())
-    _cont = json_param.get("cont")
-    _page = json_param.get("page")
-    # 返回所有的教室
-    if _cont==0:
-        Class_ord=CourseTime.objects.all().distinct().values_list("CoursePlace")
-        # 如何区分教室顺序？还有空教室渲染问题。这个教室部分之后搞。
-        Class_list = [[] for k in range(len(Class_ord))]
-        for index in range(len(Class_ord)):
-            Class_list[index]=Class_ord[index][0]
-        Course_lib_json = json.dumps(Course_lib_list)
-        print(Course_lib_json)
-        print(type(Course_lib_json))
-        return HttpResponse(content=Course_lib_json, content_type='application/json')
-    # 返回教室课表
-    elif _cont == 1:
-        _toweek= json_param.get('toweek')
-        # _coursename = json_param.get('coursename')
-        # _teachername = json_param.get('teachername')
-        # _cont = json_param.get("cont")
-        # _page = json_param.get("page")
-        # 判断是否传入周数
-        print(isinstance(_toweek,int))
-        if _toweek==None and not isinstance(_toweek,int):
-            error = {
-                "code": 4009,
-                "message": "Begin Data Error"
-            }
-            error = json.dumps(error)
-            print(error)
-            return HttpResponse(content=error, content_type='application/json')
-        # 正式请求，请求课程数据，要求给课程ID；然后我给出详细的数据，包括课程名称，教室，老师名字，课程时间；
-        _id = json_param.get("id")
-        try:
-            Course_id=Course.objects.get(id=_id)
-        except:
-            error = {
-                "code": 4009,
-                "message": "Begin Data Error"
-            }
-            error = json.dumps(error)
-            print(error)
-            return HttpResponse(content=error, content_type='application/json')
-        print(Course_id)
-        Course_detail = Course_id.coursetime_set.all().values_list('CourseWeek', 'CourseTime',"CoursePlace")
-        print(len(Course_detail))
-        print(Course_detail[0][1])
-        Course_timetable = [[[[] for j in range(5)] for i in range(5)] for k in range(7)]  # 课程
-        print("xxxxxxxxxxxxxxxxxxxxxxxxxx")
-        for index in range(len(Course_detail)):#dh_fg课程为一个数组,里面存储的两个时间
 
-            dh_fg=Course_detail[index][0].split(',')#存储的几个星期时间
-
-            end_fg = [[[],[]] for k in range(len(dh_fg))]#第一个是几个时间，第二个是开始时间和结束时间
-            get_time = Course_detail[index][1]
-            get_place=Course_detail[index][2]
-            week_time = int(get_time[3] + get_time[4])
-            week_time = int(week_time/2) - 1 #节数
-            print("_______sdsadsadsad___________")
-            for hg_i in range(len(dh_fg)):#end_fg课程为一个二维数组，
-                process_data=dh_fg[hg_i].split('-')
-                print(Course_id.CourseName)
-                print(get_place)
-                print(Course_id.CourseTeacher)
-                if len(process_data)==2:
-                    end_fg[hg_i][0] = int(process_data[0])
-                    end_fg[hg_i][1] = int(process_data[1])
-                    # 判断本周有没有这个课程
-                    if end_fg[hg_i][0] <= _toweek and end_fg[hg_i][1] >= _toweek:
-                        kcsj_day = int(get_time[0]) - 1
-                        print(kcsj_day)
-                        print(week_time)
-                        # 课程名称
-                        Course_timetable[kcsj_day][week_time][0] = Course_id.CourseName
-                        # 上课地址
-                        Course_timetable[kcsj_day][week_time][1] = get_place
-                        # 老师名称
-                        Course_timetable[kcsj_day][week_time][2] = Course_id.CourseTeacher
-                elif len(process_data)==1:
-                    end_fg[hg_i][0] = int(process_data[0])
-                    # 判断本周有没有这个课程
-                    if end_fg[hg_i][0] == _toweek :
-                        kcsj_day = int(get_time[0]) - 1
-                        # 课程名称
-                        Course_timetable[kcsj_day][week_time][0] = Course_id.CourseName
-                        # 上课地址
-                        Course_timetable[kcsj_day][week_time][1] = get_place
-                        # 老师名称
-                        Course_timetable[kcsj_day][week_time][2] = Course_id.CourseTeacher
-
-        str_json = json.dumps(Course_timetable, ensure_ascii=False, indent=2)
-        # print(str_json)
-        return HttpResponse(content=str_json, content_type='application/json')
+# def get_croom_course(request):
+#     postbody = request.body
+#     print(postbody)
+#     json_param = json.loads(postbody.decode())
+#     _cont = json_param.get("cont")
+#     _page = json_param.get("page")
+#
+#     # 返回所有的教室
+#     if _cont==0:
+#         Class_ord=CourseTime.objects.all().distinct().values_list("CoursePlace")
+#         # 如何区分教室顺序？还有空教室渲染问题。这个教室部分之后搞。
+#         Class_list = [[] for k in range(len(Class_ord))]
+#         for index in range(len(Class_ord)):
+#             Class_list[index]=Class_ord[index][0]
+#         Course_lib_json = json.dumps(Course_lib_list)
+#         print(Course_lib_json)
+#         print(type(Course_lib_json))
+#         return HttpResponse(content=Course_lib_json, content_type='application/json')
+#     # 返回教室课表
+#     elif _cont == 1:
+#         _toweek= json_param.get('toweek')
+#         # _coursename = json_param.get('coursename')
+#         # _teachername = json_param.get('teachername')
+#         # _cont = json_param.get("cont")
+#         # _page = json_param.get("page")
+#         # 判断是否传入周数
+#         print(isinstance(_toweek,int))
+#         if _toweek==None and not isinstance(_toweek,int):
+#             error = {
+#                 "code": 4009,
+#                 "message": "Begin Data Error"
+#             }
+#             error = json.dumps(error)
+#             print(error)
+#             return HttpResponse(content=error, content_type='application/json')
+#         # 正式请求，请求课程数据，要求给课程ID；然后我给出详细的数据，包括课程名称，教室，老师名字，课程时间；
+#         _id = json_param.get("id")
+#         try:
+#             Course_id=Course.objects.get(id=_id)
+#         except:
+#             error = {
+#                 "code": 4009,
+#                 "message": "Begin Data Error"
+#             }
+#             error = json.dumps(error)
+#             print(error)
+#             return HttpResponse(content=error, content_type='application/json')
+#         print(Course_id)
+#         Course_detail = Course_id.coursetime_set.all().values_list('CourseWeek', 'CourseTime',"CoursePlace")
+#         print(len(Course_detail))
+#         print(Course_detail[0][1])
+#         Course_timetable = [[[[] for j in range(5)] for i in range(5)] for k in range(7)]  # 课程
+#         print("xxxxxxxxxxxxxxxxxxxxxxxxxx")
+#         for index in range(len(Course_detail)):#dh_fg课程为一个数组,里面存储的两个时间
+#
+#             dh_fg=Course_detail[index][0].split(',')#存储的几个星期时间
+#
+#             end_fg = [[[],[]] for k in range(len(dh_fg))]#第一个是几个时间，第二个是开始时间和结束时间
+#             get_time = Course_detail[index][1]
+#             get_place=Course_detail[index][2]
+#             week_time = int(get_time[3] + get_time[4])
+#             week_time = int(week_time/2) - 1 #节数
+#             print("_______sdsadsadsad___________")
+#             for hg_i in range(len(dh_fg)):#end_fg课程为一个二维数组，
+#                 process_data=dh_fg[hg_i].split('-')
+#                 print(Course_id.CourseName)
+#                 print(get_place)
+#                 print(Course_id.CourseTeacher)
+#                 if len(process_data)==2:
+#                     end_fg[hg_i][0] = int(process_data[0])
+#                     end_fg[hg_i][1] = int(process_data[1])
+#                     # 判断本周有没有这个课程
+#                     if end_fg[hg_i][0] <= _toweek and end_fg[hg_i][1] >= _toweek:
+#                         kcsj_day = int(get_time[0]) - 1
+#                         print(kcsj_day)
+#                         print(week_time)
+#                         # 课程名称
+#                         Course_timetable[kcsj_day][week_time][0] = Course_id.CourseName
+#                         # 上课地址
+#                         Course_timetable[kcsj_day][week_time][1] = get_place
+#                         # 老师名称
+#                         Course_timetable[kcsj_day][week_time][2] = Course_id.CourseTeacher
+#                 elif len(process_data)==1:
+#                     end_fg[hg_i][0] = int(process_data[0])
+#                     # 判断本周有没有这个课程
+#                     if end_fg[hg_i][0] == _toweek :
+#                         kcsj_day = int(get_time[0]) - 1
+#                         # 课程名称
+#                         Course_timetable[kcsj_day][week_time][0] = Course_id.CourseName
+#                         # 上课地址
+#                         Course_timetable[kcsj_day][week_time][1] = get_place
+#                         # 老师名称
+#                         Course_timetable[kcsj_day][week_time][2] = Course_id.CourseTeacher
+#
+#         str_json = json.dumps(Course_timetable, ensure_ascii=False, indent=2)
+#         # print(str_json)
+#         return HttpResponse(content=str_json, content_type='application/json')
 # 如何区分教学楼和教室？
 # 教室的表现形式是什么
