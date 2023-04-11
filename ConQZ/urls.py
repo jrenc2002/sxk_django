@@ -3,31 +3,33 @@ from django.urls import path, include
 
 from ConQZ import views
 
+app_name = 'qz'
+
 urlpatterns = [
-    # http://192.168.21.128:8000/qz/get_login_info/
-    path('get_login_info/',views.get_login_info),
-    # http://192.168.21.128:8000/qz/get_student_info/
-    path('get_student_info/',views.get_student_info),
-    # http://192.168.21.128:8000/qz/get_current_time/
-    path('get_current_time/',views.get_current_time),
-    # http://192.168.21.128:8000/qz/get_class_info/
-    path('get_class_info/',views.get_class_info),
-    # # http://192.168.21.128:8000/qz/get_classroom_info/
-    path('get_classroom_info/',views.get_classroom_info),
-    # # http://192.168.21.128:8000/qz/get_grade_info/
-    path('get_grade_info/',views.get_grade_info),
-    # # http://192.168.21.128:8000/qz/get_exam_info/
-    path('get_exam_info/',views.get_exam_info),
-    # # http://192.168.21.128:8000/qz/get_share_state/
-    path('get_share_state/',views.get_share_state),
-    # # http://192.168.21.128:8000/qz/post_share_info/
-    path('post_share_info/',views.post_share_info),
-    # # http://192.168.21.128:8000/qz/reply_share_info/
-    path('reply_share_info/', views.reply_share_info),
-    # # http://192.168.21.128:8000/qz/get_share_info/
-    path('get_share_info/', views.get_share_info),
-    # # http://192.168.21.128:8000/qz/get_phonebook_info/
-    path('get_phonebook_info/', views.get_phonebook_info),
-    # # http://192.168.21.128:8000/qz/get_courselib/
-    path('get_courselib/', views.get_courselib),
+    # 用户登录信息
+    path('login-info/', views.Logininfo, name='login-info'),
+    # 学生信息
+    path('student-info/', views.StudentInfo, name='student-info'),
+    # 当前时间
+    path('current-time/', views.CurrentTime, name='current-time'),
+    # 班级信息
+    path('class-info/', views.ClassInfo, name='class-info'),
+    # 空教室信息
+    path('empty-classroom-info/', views.EmptyClassroomInfo, name='empty-classroom-info'),
+    # 成绩信息
+    path('grade-info/', views.GradeInfo, name='grade-info'),
+    # 考试信息
+    path('exam-info/', views.ExamInfo, name='exam-info'),
+    # 分享状态信息
+    path('share-state/', views.GetShareState, name='share-state'),
+    # 分享信息发布
+    path('share-state/post/', views.PostShareInfo, name='share-info'),
+    # 分享信息回复
+    path('share-state/reply/', views.ReplyShareInfo, name='share-info-reply'),
+    # 获取分享信息
+    path('share-info/get/', views.GetShareInfo, name='share-info-detail'),
+    # 电话簿信息
+    path('phonebook-info/', views.GetPhonebookInfo, name='phonebook-info'),
+    # 课程库信息
+    path('course-lib/', views.GetCourselib, name='course-lib'),
 ]
