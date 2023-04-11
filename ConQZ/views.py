@@ -7,7 +7,9 @@ import requests as requests
 
 
 from ConQZ.models import User,Share,LikesInfo,Course,CourseTime
+from requests import RequestException
 
+global HEADERS,url
 
 from django.shortcuts import render
 
@@ -21,7 +23,7 @@ HEADERS = {
 }
 url = "http://jwgl.sdust.edu.cn/app.do"
 
-def get_login_info(request):
+def Logininfo(request):
     # 检验POST
     if request.method != 'POST':
         error = {
@@ -84,8 +86,8 @@ def get_login_info(request):
         "token": session_token
     }
     return HttpResponse(content=json.dumps(response_data), content_type='application/json')
-def get_student_info(request):
-
+#JS模拟强智登录
+def StudentInfo(request):
     # 解析请求体
     if request.method != 'POST':
         error = {
@@ -101,6 +103,7 @@ def get_student_info(request):
         _password = json_param.get('password')
         cookiesstr = json_param.get("cookiesstr")
         token=json_param.get("token")
+        HEADERS["token"] = token
     except json.decoder.JSONDecodeError:
         error = {
             "code": 4000,
@@ -128,7 +131,7 @@ def get_student_info(request):
         "method": "getUserInfo",
         "xh": _account
     }
-    global HEADERS
+
 
     HEADERS["token"] = token
     print(HEADERS)
@@ -193,41 +196,77 @@ def get_student_info(request):
         error = json.dumps(error)
         return HttpResponse(content=error, content_type='application/json')
 
-def get_current_time(request):
-    postbody=request.body
-    json_param = json.loads(postbody.decode())
-    _account = json_param.get('account')
-    _password = json_param.get('password')
-    cookiesstr = json_param.get("cookiesstr")
-    try:
-        cookies = requests.utils.cookiejar_from_dict(cookiesstr)
-    except:
-        error = {
-            "code": 4008,
-            "message": "Login Error"
+def CurrentTime(request):
+    """
+    获取当前时间的视图函数
+    """
+    if request.method == "POST":
+        # 从请求体中解析参数
+        try:
+            json_param = json.loads(request.body.decode())
+        except json.JSONDecodeError:
+            error = {
+                "code": 4000,
+                "message": "Invalid JSON format"
+            }
+            return HttpResponse(json.dumps(error), content_type='application/json', status=400)
+
+        # 检查必要参数
+        _account = json_param.get('account')
+        _password = json_param.get('password')
+        cookiesstr = json_param.get("cookiesstr")
+        token = json_param.get("token")
+        if not (_account and _password and cookiesstr and token):
+            error = {
+                "code": 4002,
+                "message": "Missing parameter"
+            }
+            return HttpResponse(json.dumps(error), content_type='application/json', status=400)
+
+        # 设置请求头
+        HEADERS["token"] = token
+
+        # 解析 cookie 字符串并创建会话
+        try:
+            cookies = requests.utils.cookiejar_from_dict(cookiesstr)
+            session = requests.Session()
+            session.cookies = cookies
+        except:
+            error = {
+                "code": 4008,
+                "message": "Login Error"
+            }
+            return HttpResponse(json.dumps(error), content_type='application/json', status=400)
+
+        # 构造 GET 请求参数
+        params = {
+            "method": "getCurrentTime",
+            "currDate": datetime.datetime.now().strftime("%Y-%m-%d")
         }
-        error = json.dumps(error)
-        print(error)
-        return HttpResponse(content=error, content_type='application/json')
-    session = requests.Session()
-    session.cookies = cookies
-    global HEADERS,url
-    params = {
-        "method": "getCurrentTime",
-        "currDate": datetime.datetime.now().strftime("%Y-%m-%d")
-    }
-    try:
-        req = session.get(url, params=params, timeout=5, headers=HEADERS)
-    except:
-        print("session对话错误")
+
+        # 发送请求
+        try:
+            req = session.get(url, params=params, timeout=5, headers=HEADERS)
+            req.raise_for_status()  # 检查响应状态码是否为 200
+        except requests.exceptions.RequestException as e:
+            error = {
+                "code": 4001,
+                "message": "Session Error"
+            }
+            return HttpResponse(json.dumps(error), content_type='application/json', status=400)
+
+        # 返回响应结果
+        return HttpResponse(req.content, content_type='application/json')
+
+    else:
         error = {
-            "code": 4001,
-            "message": "Session Error"
+            "code": 4003,
+            "message": "Invalid request method"
         }
-        error = json.dumps(error)
-        return HttpResponse(content=error, content_type='application/json')
-    return HttpResponse(content=req,content_type='application/json')
-def get_class_info(request):
+        return HttpResponse(json.dumps(error), content_type='application/json', status=405)
+
+
+def ClassInfo(request):
     global url,HEADERS
     postbody = request.body
     json_param = json.loads(postbody.decode())
@@ -235,6 +274,8 @@ def get_class_info(request):
     _password = json_param.get('password')
     cookiesstr = json_param.get("cookiesstr")
     zc = json_param.get("cont",-1)
+    token = json_param.get("token")
+    HEADERS["token"] = token
     try:
         cookies = requests.utils.cookiejar_from_dict(cookiesstr)
     except:
@@ -394,14 +435,16 @@ def get_class_info(request):
     str_json = json.dumps(table, ensure_ascii=False, indent=2)
     # print(str_json)
     return HttpResponse(content=str_json,content_type='application/json')
-def get_classroom_info(request):
+
+def EmptyClassroomInfo(request):
     postbody = request.body
     json_param = json.loads(postbody.decode())
     _account = json_param.get('account')
     _password = json_param.get('password')
     cookiesstr = json_param.get("cookiesstr")
     get_cont = json_param.get("cont")
-
+    token = json_param.get("token")
+    HEADERS["token"] = token
     idleTime = "allday"
 
     if (get_cont != None):
@@ -419,7 +462,7 @@ def get_classroom_info(request):
         return HttpResponse(content=error, content_type='application/json')
     session = requests.Session()
     session.cookies = cookies
-    global HEADERS,url
+
     params = {
         "method": "getKxJscx",
         "time": datetime.datetime.now().strftime("%Y-%m-%d"),
@@ -436,54 +479,119 @@ def get_classroom_info(request):
         error = json.dumps(error)
         return HttpResponse(content=error, content_type='application/json')
     return HttpResponse(content=req,content_type='application/json')
-def get_grade_info(request):  # put application's code here
 
-    global HEADERS,url
-    postbody = request.body
-    json_param = json.loads(postbody.decode())
+def GradeInfo(request):
+    """
+    说明：获取学生成绩信息视图函数
+
+    参数：
+    - request: 请求对象
+
+    返回值：
+    - HttpResponse对象
+
+    异常：
+    - 返回4001错误：Session错误
+    - 返回4008错误：登录错误
+    """
+
+    # 设置全局变量
+    global HEADERS, url
+
+    # 解析POST请求中的JSON参数
+    try:
+        json_param = json.loads(request.body)
+    except json.JSONDecodeError:
+        # 返回JSON解码错误
+        error = {
+            "code": 4000,
+            "message": "JSON Decode Error"
+        }
+        return HttpResponse(content=json.dumps(error), content_type='application/json', status=400)
+
+    # 获取必需的参数
     _account = json_param.get('account')
     _password = json_param.get('password')
     cookiesstr = json_param.get("cookiesstr")
     get_cont = json_param.get("cont")
-    sy = ""
-    if (get_cont != None):
-        sy=get_cont
-    try:
-        cookies = requests.utils.cookiejar_from_dict(cookiesstr)
-    except:
+    token = json_param.get("token")
+
+    # 检查必需的参数是否存在
+    if not (_account and _password and cookiesstr and token):
+        # 返回缺少参数的错误
         error = {
-            "code": 4008,
-            "message": "Login Error"
+            "code": 4002,
+            "message": "Missing Required Parameters"
         }
-        error = json.dumps(error)
-        print(error)
-        return HttpResponse(content=error, content_type='application/json')
-    session = requests.Session()
-    session.cookies = cookies
-    params = {
-        "method": "getCjcx",
-        "xh": _account,
-        "xnxqid": sy
-    }
+        return HttpResponse(content=json.dumps(error), content_type='application/json', status=400)
+
+    # 设置请求头部的token字段
+    HEADERS["token"] = token
+
+    # 获取sy参数（如果存在）
+    sy = "" if get_cont is None else get_cont
+
     try:
+        # 解析cookies字符串，构建会话
+        cookies = requests.utils.cookiejar_from_dict(cookiesstr)
+        session = requests.Session()
+        session.cookies = cookies
+
+        # 设置请求参数
+        params = {
+            "method": "getCjcx",
+            "xh": _account,
+            "xnxqid": sy
+        }
+
+        # 发送GET请求
         req = session.get(url, params=params, timeout=5, headers=HEADERS)
-    except:
-        print("session对话错误")
+        req.raise_for_status()  # 检查HTTP错误状态码
+
+    except (requests.exceptions.RequestException, ValueError):
+        # 返回Session错误
         error = {
             "code": 4001,
             "message": "Session Error"
         }
-        error = json.dumps(error)
-        return HttpResponse(content=error, content_type='application/json')
-    return HttpResponse(content=req, content_type='application/json')
-def get_exam_info(request):  # put application's code here
-    postbody = request.body
-    json_param = json.loads(postbody.decode())
-    _account = json_param.get('account')
-    _password = json_param.get('password')
-    cookiesstr = json_param.get("cookiesstr")
-    global HEADERS,url
+        return HttpResponse(content=json.dumps(error), content_type='application/json', status=400)
 
+    except requests.exceptions.HTTPError as err:
+        # 返回HTTP错误
+        error = {
+            "code": err.response.status_code,
+            "message": err.response.reason
+        }
+        return HttpResponse(content=json.dumps(error), content_type='application/json', status=err.response.status_code)
+
+    # 返回学生成绩信息
+    return HttpResponse(content=req, content_type='application/json')
+
+def ExamInfo(request):
+    """
+    获取考试信息视图函数
+    """
+    # 获取请求参数
+    try:
+        postbody = request.body
+        json_param = json.loads(postbody.decode())
+        _account = json_param.get('account')
+        _password = json_param.get('password')
+        cookiesstr = json_param.get("cookiesstr")
+        token = json_param.get("token")
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        error = {
+            "code": 4000,
+            "message": "Request Parameter Error",
+            "details": str(e)
+        }
+        error = json.dumps(error)
+        return HttpResponse(content=error, content_type='application/json', status=400)
+
+
+    HEADERS["token"] = token
+
+    # 创建会话对象，设置 cookies
     try:
         cookies = requests.utils.cookiejar_from_dict(cookiesstr)
     except:
@@ -493,26 +601,33 @@ def get_exam_info(request):  # put application's code here
         }
         error = json.dumps(error)
         print(error)
-        return HttpResponse(content=error, content_type='application/json')
+        return HttpResponse(content=error, content_type='application/json', status=400)
+
     session = requests.Session()
     session.cookies = cookies
+
+    # 发送 GET 请求获取考试信息
     params = {
         "method": "getKscx",
         "xh": _account,
     }
     try:
         req = session.get(url, params=params, timeout=5, headers=HEADERS)
-    except:
-        print("session对话错误")
+        req.raise_for_status()
+    except RequestException as e:
         error = {
             "code": 4001,
-            "message": "Session Error"
+            "message": "Request Error",
+            "details": str(e)
         }
         error = json.dumps(error)
-        return HttpResponse(content=error, content_type='application/json')
-    return HttpResponse(content=req, content_type='application/json')
+        print(error)
+        return HttpResponse(content=error, content_type='application/json', status=400)
+
+    return HttpResponse(content=req.content, content_type='application/json', status=200)
+
 #共享课表/成绩路由
-def reply_share_info(request):
+def ReplyShareInfo(request):
     postbody=request.body
     print(postbody)
     json_param = json.loads(postbody.decode())
@@ -675,7 +790,7 @@ def reply_share_info(request):
         error = json.dumps(error)
         print(error)
         return HttpResponse(content=error, content_type='application/json')
-def post_share_info(request):
+def PostShareInfo(request):
     postbody=request.body
     print(postbody)
     json_param = json.loads(postbody.decode())
@@ -814,7 +929,7 @@ def post_share_info(request):
         error = json.dumps(error)
         print(error)
         return HttpResponse(content=error, content_type='application/json')
-def get_share_state(request):
+def GetShareState(request):
     postbody=request.body
     print(postbody)
     json_param = json.loads(postbody.decode())
@@ -849,7 +964,7 @@ def get_share_state(request):
             "message": "Invalid Login"
         }
         return HttpResponse(content=error, content_type='application/json')
-def get_share_info(request):
+def GetShareInfo(request):
 
     global url,HEADERS
     postbody = request.body
@@ -1076,7 +1191,7 @@ def get_share_info(request):
             return HttpResponse(content=error, content_type='application/json')
         return HttpResponse(content=req, content_type='application/json')
 #小科通讯录
-def get_phonebook_info(request):
+def GetPhonebookInfo(request):
     postbody = request.body
     print(postbody)
     json_param = json.loads(postbody.decode())
@@ -1127,7 +1242,7 @@ def get_phonebook_info(request):
 #小科经验包
 
 #小科课程库
-def get_courselib(request):
+def GetCourselib(request):
     # 输出的时候要输出id，然后我们可以通过id去反向查询。
     postbody = request.body
     print(postbody)
