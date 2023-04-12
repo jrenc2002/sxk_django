@@ -1191,25 +1191,25 @@ def GetShareInfo(request):
             return HttpResponse(content=error, content_type='application/json')
         return HttpResponse(content=req, content_type='application/json')
 #小科通讯录
+
 def GetPhonebookInfo(request):
-    postbody = request.body
-    print(postbody)
-    json_param = json.loads(postbody.decode())
+    # 获取POST请求的body数据
+    post_body = request.body
+    print(post_body)
+
+    # 解析JSON参数
+    json_param = json.loads(post_body.decode())
+
+    # 序列化数据库中所有的LikesInfo对象，并将结果赋值给content变量
     content = serializers.serialize("json", LikesInfo.objects.all())
     print(content)
     print(type(content))
-    #________________________
-    # 输出的时候要输出id，然后我们可以通过id去反向查询。
-    # 节流请求课程表数据
-    # 我该如何返回数据？
-    # 问题1   我记录的是每节课的数据所以如果我想导出所有课程的数据会存在重复数据
-    # 解决方法 1.建立一个新数组（表），只导前三项（实时性弱）
-    #        2.数据库一对多，一个数据库存课程，然后对应着一个表存时间(实时性强)
-    #        3.把coursetime和couseweek整合成多维数组的形式直接存放.(一劳永逸)
-    # 实例化    数据库 课程表 时间表
-    _page = json_param.get("page")
-    _likename = json_param.get('likename')
-    if _likename==None or _page==None:
+
+    # 检查并获取分页参数和like名称参数
+    page = json_param.get("page")
+    like_name = json_param.get('likename')
+    if like_name is None or page is None:
+        # 如果缺少参数，则返回错误响应
         error = {
             "code": 4009,
             "message": "Begin Data Error"
@@ -1217,24 +1217,65 @@ def GetPhonebookInfo(request):
         error = json.dumps(error)
         print(error)
         return HttpResponse(content=error, content_type='application/json')
-    Course_lib = serializers.serialize("json", LikesInfo.objects.filter(Groupname__icontains=_likename))
-    print(Course_lib)
-    print("-----")
-    Course_lib = json.loads(Course_lib)
-    Course_lib_list = [[] for k in range(5)]
-    for index in range((_page - 1) * 5, (_page) * 5):
-        if len(Course_lib) > index:
-            print(index)
-            Course_lib_list[index - (_page - 1) * 5] = Course_lib[index]['fields']
-            Course_lib_list[index-(_page-1)*5]["id"]=Course_lib[index]['pk']
-            print(Course_lib_list[index - (_page - 1) * 5])
-            print("-----------")
-    Course_lib_json = json.dumps(Course_lib_list)
-    print(Course_lib_json)
-    print(type(Course_lib_json))
-    return HttpResponse(content=Course_lib_json, content_type='application/json')
 
-    return HttpResponse(content=content, content_type='application/json')
+    # 从数据库中获取包含like名称的LikesInfo对象
+    course_lib = LikesInfo.objects.filter(Groupname__icontains=like_name)
+
+    # 将course_lib序列化为JSON对象，然后再反序列化为Python对象
+    course_lib_json = serializers.serialize('json', course_lib)
+    course_lib_list = json.loads(course_lib_json)
+
+    # 创建一个空列表来保存Course_lib_list的前5项
+    course_lib_top_5 = []
+
+    # 计算第一个需要返回的项的索引
+    start_index = (page - 1) * 5
+
+    # 计算最后一个需要返回的项的索引
+    end_index = page * 5
+
+    # 如果end_index超出了Course_lib_list的长度，则将其设置为Course_lib_list的长度
+    if end_index > len(course_lib_list):
+        end_index = len(course_lib_list)
+
+    # 遍历Course_lib_list中的项，将前5项添加到course_lib_top_5中
+    for index in range(start_index, end_index):
+        # 将当前项添加到course_lib_top_5中
+        current_item = course_lib_list[index]['fields']
+        current_item['id'] = course_lib_list[index]['pk']
+        course_lib_top_5.append(current_item)
+
+    # 将course_lib_top_5序列化为JSON对象，并将其返回
+    course_lib_top_5_json = json.dumps(course_lib_top_5)
+    return HttpResponse(content=course_lib_top_5_json, content_type='application/json')
+    #  _page = json_param.get("page")
+    #     _likename = json_param.get('likename')
+    #     if _likename==None or _page==None:
+    #         error = {
+    #             "code": 4009,
+    #             "message": "Begin Data Error"
+    #         }
+    #         error = json.dumps(error)
+    #         print(error)
+    #         return HttpResponse(content=error, content_type='application/json')
+    #     Course_lib = serializers.serialize("json", LikesInfo.objects.filter(Groupname__icontains=_likename))
+    #     print(Course_lib)
+    #     print("-----")
+    #     Course_lib = json.loads(Course_lib)
+    #     Course_lib_list = [[] for k in range(5)]
+    #     for index in range((_page - 1) * 5, (_page) * 5):
+    #         if len(Course_lib) > index:
+    #             print(index)
+    #             Course_lib_list[index - (_page - 1) * 5] = Course_lib[index]['fields']
+    #             Course_lib_list[index-(_page-1)*5]["id"]=Course_lib[index]['pk']
+    #             print(Course_lib_list[index - (_page - 1) * 5])
+    #             print("-----------")
+    #     Course_lib_json = json.dumps(Course_lib_list)
+    #     print(Course_lib_json)
+    #     print(type(Course_lib_json))
+    #     return HttpResponse(content=Course_lib_json, content_type='application/json')
+    #
+    #     return HttpResponse(content=content, content_type='application/json'
 #小科食物库
 
 #小科备忘录
@@ -1243,133 +1284,106 @@ def GetPhonebookInfo(request):
 
 #小科课程库
 def GetCourselib(request):
-    # 输出的时候要输出id，然后我们可以通过id去反向查询。
-    postbody = request.body
-    print(postbody)
-    json_param = json.loads(postbody.decode())
-    _cont = json_param.get("cont")
-    # 节流请求课程表数据
-    # 我该如何返回数据？
-    # 问题1   我记录的是每节课的数据所以如果我想导出所有课程的数据会存在重复数据
-    # 解决方法 1.建立一个新数组（表），只导前三项（实时性弱）
-    #        2.数据库一对多，一个数据库存课程，然后对应着一个表存时间(实时性强)
-    #        3.把coursetime和couseweek整合成多维数组的形式直接存放.(一劳永逸)
-    # 实例化    数据库 课程表 时间表
-    if _cont==0:
 
-        _page = json_param.get("page")
-        _coursename = json_param.get('coursename')
-        _teachername = json_param.get('teachername')
-        if _coursename==None or _teachername==None:
-            error = {
-                "code": 4009,
-                "message": "Begin Data Error"
-            }
-            error = json.dumps(error)
-            print(error)
-            return HttpResponse(content=error, content_type='application/json')
-        Course_lib = serializers.serialize("json", Course.objects.filter(CourseName__icontains=_coursename,CourseTeacher__icontains=_teachername))
-        print(Course_lib)
-        print("-----")
-        Course_lib = json.loads(Course_lib)
-        Course_lib_list = [[] for k in range(10)]
-        for index in range((_page - 1) * 10, (_page) * 10):
-            if len(Course_lib) > index:
-                print(index)
-                Course_lib_list[index - (_page - 1) * 10] = Course_lib[index]['fields']
-                Course_lib_list[index-(_page-1)*10]["id"]=Course_lib[index]['pk']
-                print(Course_lib_list[index - (_page - 1) * 10])
-                print("-----------")
-        Course_lib_json = json.dumps(Course_lib_list)
-        print(Course_lib_json)
-        print(type(Course_lib_json))
-        return HttpResponse(content=Course_lib_json, content_type='application/json')
-    elif _cont == 1:
-        _toweek= json_param.get('toweek')
-        # _coursename = json_param.get('coursename')
-        # _teachername = json_param.get('teachername')
-        # _cont = json_param.get("cont")
-        # _page = json_param.get("page")
-        # 判断是否传入周数
-        _toweek=_toweek
-        if _toweek==None and not isinstance(_toweek,int):
-            print("2311313")
-            error = {
-                "code": 4009,
-                "message": "Begin Data Error"
-            }
-            error = json.dumps(error)
-            print(error)
-            return HttpResponse(content=error, content_type='application/json')
-        # 正式请求，请求课程数据，要求给课程ID；然后我给出详细的数据，包括课程名称，教室，老师名字，课程时间；
-        _id = json_param.get("id")
+    if request.method == 'POST':
+        post_body = request.body
+        print(post_body)
         try:
-            Course_id=Course.objects.get(id=_id)
-        except:
-            print("Ssdas")
+            json_param = json.loads(post_body.decode())
+        except ValueError:
             error = {
                 "code": 4009,
-                "message": "Begin Data Error"
+                "message": "Invalid JSON data"
             }
             error = json.dumps(error)
             print(error)
             return HttpResponse(content=error, content_type='application/json')
-        print(Course_id)
-        Course_detail = Course_id.coursetime_set.all().values_list('CourseWeek', 'CourseTime',"CoursePlace")
-        print(len(Course_detail))
-        print(Course_detail[0][1])
-        Course_timetable = [[[[] for j in range(5)] for i in range(5)] for k in range(7)]  # 课程
-        print("xxxxxxxxxxxxxxxxxxxxxxxxxx")
-        for index in range(len(Course_detail)):#dh_fg课程为一个数组,里面存储的两个时间
-            dh_fg=Course_detail[index][0].split(',')#存储的几个星期时间
-            end_fg = [[[],[]] for k in range(len(dh_fg))]#第一个是几个时间，第二个是开始时间和结束时间
-            get_time = Course_detail[index][1]
-            get_place=Course_detail[index][2]
-            week_time = int(get_time[3] + get_time[4])
-            print(week_time)
-            week_time = int(week_time/2) - 1 #节数
-            print("_______sdsadsadsad___________")
-            for hg_i in range(len(dh_fg)):#end_fg课程为一个二维数组，
-                process_data=dh_fg[hg_i].split('-')
-                print(Course_id.CourseName)
-                print(get_place)
-                print(Course_id.CourseTeacher)
-                if len(process_data)==2:
-                    end_fg[hg_i][0] = int(process_data[0])
-                    end_fg[hg_i][1] = int(process_data[1])
-                    # 判断本周有没有这个课程
-                    if end_fg[hg_i][0] <= _toweek and end_fg[hg_i][1] >= _toweek:
-                        kcsj_day = int(get_time[0]) - 1
-                        print(kcsj_day)
-                        print(week_time)
-                        # 课程名称
-                        Course_timetable[kcsj_day][week_time][0] = Course_id.CourseName
-                        # 上课地址
-                        Course_timetable[kcsj_day][week_time][1] = get_place
-                        # 老师名称
-                        Course_timetable[kcsj_day][week_time][2] = Course_id.CourseTeacher
-                        #存放周数
-                        Course_timetable[kcsj_day][week_time][3] = Course_detail[index][0]
-                elif len(process_data)==1:
-                    end_fg[hg_i][0] = int(process_data[0])
-                    # 判断本周有没有这个课程
-                    if end_fg[hg_i][0] == _toweek :
-                        kcsj_day = int(get_time[0]) - 1
-                        # 课程名称
-                        Course_timetable[kcsj_day][week_time][0] = Course_id.CourseName
-                        # 上课地址
-                        Course_timetable[kcsj_day][week_time][1] = get_place
-                        # 老师名称
-                        Course_timetable[kcsj_day][week_time][2] = Course_id.CourseTeacher
-                        #存放周数
-                        Course_timetable[kcsj_day][week_time][3] = Course_detail[index][0]
 
-        str_json = json.dumps(Course_timetable, ensure_ascii=False, indent=2)
-        # print(str_json)
-        return HttpResponse(content=str_json, content_type='application/json')
+    # 处理 "cont" 字段
+    cont = json_param.get("cont")
+    if cont==0:
+        # 处理 "page" 和 "coursename"、"teachername" 字段
+        page = json_param.get("page")
+        coursename = json_param.get('coursename')
+        teachername = json_param.get('teachername')
+        print(page,coursename,teachername)
+        # 分页查询课程表数据
+        if not page :
+            error = {
+                "code": 400,
+                "message": "Bad Request: Missing required parameters."
+            }
+            return JsonResponse(error, status=400)
+
+        courses = Course.objects.filter(CourseName__icontains=coursename, CourseTeacher__icontains=teachername)
+        course_list = [[] for k in range(10)]
+
+        for index, course in enumerate(courses[(page - 1) * 10: page * 10], start=(page - 1) * 10):
+            course_fields = {
+                "id": course.id,
+                "CourseName": course.CourseName,
+                "CourseTeacher": course.CourseTeacher,
+            }
+            course_list[index - (page - 1) * 10] = course_fields
+
+        response_data = {
+            "code": 200,
+            "data": course_list,
+        }
+        return JsonResponse(response_data, status=200)
+    elif cont == 1:
+        toweek= json_param.get('toweek')
+        course_id = json_param.get("id")
+        # 查询指定课程的课程表数据
+        if not toweek or not course_id or not isinstance(toweek, int):
+            error = {
+                "code": 400,
+                "message": "Bad Request: Missing required parameters."
+            }
+            return JsonResponse(error, status=400)
+        # 正式请求，请求课程数据，要求给课程ID；然后我给出详细的数据，包括课程名称，教室，老师名字，课程时间；
+
+        try:
+            course = Course.objects.get(id=course_id)
+            course_detail = course.coursetime_set.all().values_list('CourseWeek', 'CourseTime', 'CoursePlace')
+        except Course.DoesNotExist:
+            error = {
+                "code": 4009,
+                "message": "Begin Data Error"
+            }
+            return HttpResponse(content=json.dumps(error), content_type='application/json')
+
+        timetable = [[[[] for j in range(5)] for i in range(5)] for k in range(7)]  # 课程
+
+        for detail in course_detail:
+            week_nums = detail[0].split(',')
+            time_range = detail[1]
+            place = detail[2]
+
+            time_slot = int(time_range[3] + time_range[4])
+            time_slot = int(time_slot / 2) - 1  # 节数
+
+            for week_num in week_nums:
+                if '-' in week_num:
+                    start_week, end_week = map(int, week_num.split('-'))
+                    if start_week <= toweek <= end_week:
+                        day = int(time_range[0]) - 1
+                        timetable[day][time_slot][0] = course.CourseName
+                        timetable[day][time_slot][1] = place
+                        timetable[day][time_slot][2] = course.CourseTeacher
+                        timetable[day][time_slot][3] = detail[0]
+                else:
+                    if int(week_num) == toweek:
+                        day = int(time_range[0]) - 1
+                        timetable[day][time_slot][0] = course.CourseName
+                        timetable[day][time_slot][1] = place
+                        timetable[day][time_slot][2] = course.CourseTeacher
+                        timetable[day][time_slot][3] = detail[0]
+        return HttpResponse(content=json.dumps(timetable, ensure_ascii=False, indent=2),
+                            content_type='application/json')
 
     # >> > coursedetil = course.coursetime_set.all().values_list('CourseWeek', 'CourseTime')
-    # >> > coursedetil
+    # >>  coursedet>il
     # < QuerySet[('2-9', '20304')] >
     # >> > coursedetil[0]
     # ('2-9', '20304')
@@ -1378,6 +1392,7 @@ def GetCourselib(request):
     # elif _cont==1:
     #
     #     return HttpResponse(content=req, content_type='application/json')
+
 # def process_coureselib_data():
 
 # def get_croom_course(request):
