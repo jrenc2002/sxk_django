@@ -4,7 +4,7 @@ from django.db import models
 class User(models.Model):
     Snumber =models.BigIntegerField('学号',primary_key=True)
     Name=models.CharField('名称',max_length=20,default='')
-    PasswordQZ=models.CharField('强智密码',max_length=50,default='')
+    Openid=models.CharField('微信ID',max_length=100,default='')
     Classname=models.CharField('班级名称',max_length=50,default='')
     Majorname=models.CharField('专业名称',max_length=50,default='')
     Collegename=models.CharField('学院名称',max_length=50,default='')
@@ -27,7 +27,12 @@ class LikesInfo(models.Model):
 class Course(models.Model):
    CourseName=models.CharField('课程名称',max_length=100,default='')
    CourseTeacher=models.CharField('教师名称',max_length=20,default='')
-
+class CourseSchedule(models.Model):
+    user = models.ForeignKey(User,verbose_name='学号', on_delete=models.CASCADE)
+    week_number = models.IntegerField(verbose_name='星期')
+    schedule = models.CharField(max_length=1000,verbose_name='课表')
+    class Meta:
+        unique_together = ('user', 'week_number')
 class CourseTime(models.Model):
     CourseId = models.ForeignKey(Course, verbose_name='课程编号', on_delete=models.CASCADE)
     CourseTime=models.CharField('上课时间',max_length=20,default='')

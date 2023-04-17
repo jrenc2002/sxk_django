@@ -5,6 +5,10 @@ from django.core import serializers
 from django.http import HttpResponse, JsonResponse
 import requests as requests
 
+from django.conf import settings
+from django.contrib.auth import authenticate
+from django.core.cache import cache
+import jwt
 
 from ConQZ.models import User,Share,LikesInfo,Course,CourseTime
 from requests import RequestException
@@ -23,319 +27,108 @@ HEADERS = {
 }
 url = "http://jwgl.sdust.edu.cn/app.do"
 
-def Logininfo(request):
-    # 检验POST
-    if request.method != 'POST':
-        error = {
-            "code": 4000,
-            "message": "Invalid Request Method"
-        }
-        return HttpResponse(content=json.dumps(error), content_type='application/json', status=400)
 
-    # 读取POST请求的数据
+def auth_by_snumber(snumber,token):
+    """根据学号和openid鉴权"""
+    if not snumber or not token:
+        return None
+
+    # 解析token获取openid
     try:
-        post_data = json.loads(request.body.decode())
-    except json.JSONDecodeError:
-        error = {
-            "code": 4001,
-            "message": "Invalid Request Body"
-        }
-        return HttpResponse(content=json.dumps(error), content_type='application/json', status=400)
-    account = post_data.get('account')
-    password = post_data.get('password')
-    if not all([account, password]):
-        error = {
-            "code": 4002,
-            "message": "Missing Account or Password"
-        }
-        return HttpResponse(content=json.dumps(error), content_type='application/json', status=400)
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+        openid = payload['openid']
+    except jwt.exceptions.ExpiredSignatureError:
+        return None
+    except jwt.exceptions.InvalidTokenError:
+        return None
 
-    #构造请求参数
-    params = {
-        "method": "authUser",
-        "xh": account,
-        "pwd": password
-    }
-    global HEADERS, url
-
-
-    session = requests.Session()
+    # 根据snumber和openid查询用户
     try:
-        req = session.get(url, params=params, timeout=5, headers=HEADERS)
-        s = req.json()
-    except requests.exceptions.RequestException:
-        # 如果请求出错，返回4001错误
-        error = {"code": 4001, "message": "Session Error"}
-        return JsonResponse(error, status=400)
-
-    # 检查是否登录成功
-    if s.get("flag") != "1":
-        # 如果登录不成功，返回400错误
-        error = {"code": 4000, "message": "Invalid Login"}
-        return JsonResponse(error, status=400)
-
-    # 保存cookie
-
-    cookies_dict = requests.utils.dict_from_cookiejar(session.cookies)
-    cookies_str = json.dumps(cookies_dict)
-    session_token = s.get("token")
-
-    # 返回cookie和token
-    response_data = {
-        "cookies": cookies_str,
-        "token": session_token
-    }
-    return HttpResponse(content=json.dumps(response_data), content_type='application/json')
-#JS模拟强智登录
-def StudentInfo(request):
-    # 解析请求体
-    if request.method != 'POST':
-        error = {
-            "code": 4003,
-            "message": "Invalid request method"
-        }
-        error = json.dumps(error)
-        return HttpResponse(content=error, content_type='application/json')
-
-    try:
-        json_param = json.loads(request.body.decode())
-        _account = json_param.get('account')
-        _password = json_param.get('password')
-        cookiesstr = json_param.get("cookiesstr")
-        token=json_param.get("token")
-        HEADERS["token"] = token
-    except json.decoder.JSONDecodeError:
-        error = {
-            "code": 4000,
-            "message": "Invalid request body"
-        }
-        error = json.dumps(error)
-        return HttpResponse(content=error, content_type='application/json')
-
-    # 验证登录信息
-    try:
-        cookies = requests.utils.cookiejar_from_dict(cookiesstr)
-
-    except:
-        error = {
-            "code": 4008,
-            "message": "Login Error"
-        }
-        error = json.dumps(error)
-        return HttpResponse(content=error, content_type='application/json')
-
-    session = requests.Session()
-    session.cookies = cookies
-
-    params = {
-        "method": "getUserInfo",
-        "xh": _account
-    }
-
-
-    HEADERS["token"] = token
-    print(HEADERS)
-
-    try:
-        req = session.get(url, params=params, timeout=5, headers=HEADERS)
-    except:
-        error = {
-            "code": 4001,
-            "message": "Session Error"
-        }
-        error = json.dumps(error)
-        return HttpResponse(content=error, content_type='application/json')
-
-    data = json.loads(req.text)
-    if data.get('token') == '-1':
-        error = {
-            "code": 4009,
-            "message": "Token=-1"
-        }
-        error = json.dumps(error)
-        return HttpResponse(content=error, content_type='application/json')
-    elif req.status_code != 200:
-        error = {
-            "code": 4004,
-            "message": "Bad Request"
-        }
-        error = json.dumps(error)
-        return HttpResponse(content=error, content_type='application/json')
-
-    print(req.text)
-    # 更新用户信息
-    try:
-        user_obj = User.objects.get(Snumber=_account)
+        user = User.objects.get(snumber=snumber, openid=openid)
     except User.DoesNotExist:
-       user_obj = User.objects.create(Snumber=int(data.get('xh', '')), Name=data.get('xm', ''), PasswordQZ=_password,
-                                           Classname=data.get('bj', ''), Majorname=data.get('zymc', ''), Collegename=data.get('yxmc', ''),
-                                           Enteryear=int(data.get('rxnf', '')), Gradenumber=int(data.get('usertype', '')))
-       user_obj.save()
-       print("对新用户进行了创建用户表操作")
-    else:
-        if user_obj.PasswordQZ != _password:
-            user_obj.PasswordQZ = _password
-            user_obj.save()
-            print("对新用户进行了更新密码的操作")
+        return None
 
-    share_obj, created = Share.objects.get_or_create(Usernumber_id=_account)
-    # 创建共享表
-    if created:
-        print("对新用户进行了创建共享表操作")
-    else:
-        print("共享表已存在")
+    return user
 
-    if req.status_code == 200:
-        data = json.loads(req.text)
-        return JsonResponse(data, safe=False)
-    else:
-        error = {
-            "code": 4004,
-            "message": "Bad Request"
-        }
-        error = json.dumps(error)
-        return HttpResponse(content=error, content_type='application/json')
-
-def CurrentTime(request):
+def Logininfo(request):
     """
-    获取当前时间的视图函数
+    鉴权登录并创建用户表，返回用户对话token
+    :return: 用户对话token
     """
-    if request.method == "POST":
-        # 从请求体中解析参数
-        try:
-            json_param = json.loads(request.body.decode())
-        except json.JSONDecodeError:
-            error = {
-                "code": 4000,
-                "message": "Invalid JSON format"
-            }
-            return HttpResponse(json.dumps(error), content_type='application/json', status=400)
+    if request.method == 'POST':
+        json_param = json.loads(request.body.decode())
+        account = int(json_param.get('snumber'))
+        name = json_param.get('name')
+        classname = json_param.get('classname')
+        majorname = json_param.get('majorname')
+        collegename = json_param.get('collegename')
+        enteryear = int(json_param.get('enteryear'))
+        gradenumber = int(json_param.get('gradenumber'))
+        code = json_param.get('code')
 
-        # 检查必要参数
-        _account = json_param.get('account')
-        _password = json_param.get('password')
-        cookiesstr = json_param.get("cookiesstr")
-        token = json_param.get("token")
-        if not (_account and _password and cookiesstr and token):
-            error = {
-                "code": 4002,
-                "message": "Missing parameter"
-            }
-            return HttpResponse(json.dumps(error), content_type='application/json', status=400)
+        if code:
+            # 发起网络请求，获取用户的 openid 和 session_key
+            response = requests.get(
+                f'https://api.weixin.qq.com/sns/jscode2session?appid=wx09eeff6c032da35a&secret=cbabace88e0f70970a07eb468d6db23d&js_code={code}&grant_type=authorization_code')
 
-        # 设置请求头
-        HEADERS["token"] = token
+            if response.status_code != 200:
+                return JsonResponse({'error': '登录失败'})
+            # 解析微信服务器的返回结果
+            data = response.json()
+            openid = data.get('openid')
+            # session_key = data.get('session_key')
 
-        # 解析 cookie 字符串并创建会话
-        try:
-            cookies = requests.utils.cookiejar_from_dict(cookiesstr)
-            session = requests.Session()
-            session.cookies = cookies
-        except:
-            error = {
-                "code": 4008,
-                "message": "Login Error"
-            }
-            return HttpResponse(json.dumps(error), content_type='application/json', status=400)
+            # 如果 openid 返回成功，读入输入的数据存入数据库，如果有这个用户只更新 Openid，没有这个用户新建表
+            try:
+                user_obj = User.objects.get(Snumber=account)
+                user_obj.Openid = openid
+                user_obj.save()
+                print("更新了用户表的 Openid")
+            except User.DoesNotExist:
+                user_obj = User.objects.create(Snumber=account, Name=name,
+                                               Classname=classname, Majorname=majorname,
+                                               Collegename=collegename,
+                                               Enteryear=enteryear,
+                                               Gradenumber=gradenumber,Openid=openid)
+                user_obj.save()
+                print("创建了新用户表")
 
-        # 构造 GET 请求参数
-        params = {
-            "method": "getCurrentTime",
-            "currDate": datetime.datetime.now().strftime("%Y-%m-%d")
-        }
+            share_obj, created = Share.objects.get_or_create(Usernumber_id=account)
+            # 创建共享表
+            if created:
+                print("创建了共享表")
+            else:
+                print("共享表已存在")
 
-        # 发送请求
-        try:
-            req = session.get(url, params=params, timeout=5, headers=HEADERS)
-            req.raise_for_status()  # 检查响应状态码是否为 200
-        except requests.exceptions.RequestException as e:
-            error = {
-                "code": 4001,
-                "message": "Session Error"
-            }
-            return HttpResponse(json.dumps(error), content_type='application/json', status=400)
+            # 根据 openid 和 session_key 进行登录验证，并返回响应数据
+            # 绑定 openid 到 token
+            payload = {'openid': openid}
+            token = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
+            return JsonResponse({'status': 'success', 'token': token})
 
-        # 返回响应结果
-        return HttpResponse(req.content, content_type='application/json')
-
+        else:
+            return JsonResponse({'status': 'error', 'message': '缺少 code 参数'})
     else:
-        error = {
-            "code": 4003,
-            "message": "Invalid request method"
-        }
-        return HttpResponse(json.dumps(error), content_type='application/json', status=405)
+        return JsonResponse({'status': 'error', 'message': '仅支持 POST 请求'})
+
 
 
 def ClassInfo(request):
     global url,HEADERS
-    postbody = request.body
-    json_param = json.loads(postbody.decode())
-    _account = json_param.get('account')
-    _password = json_param.get('password')
-    cookiesstr = json_param.get("cookiesstr")
-    zc = json_param.get("cont",-1)
-    token = json_param.get("token")
-    HEADERS["token"] = token
+    # 获取请求体中的参数
     try:
-        cookies = requests.utils.cookiejar_from_dict(cookiesstr)
-    except:
-        error = {
-            "code": 4008,
-            "message": "Login Error"
-        }
-        error = json.dumps(error)
-        print(error)
-        return HttpResponse(content=error, content_type='application/json')
-    session = requests.Session()
-    session.cookies = cookies
-    params = {
-        "method": "getCurrentTime",
-        "currDate": datetime.datetime.now().strftime("%Y-%m-%d")
-    }
-    try:
-        req = session.get(url, params=params, timeout=5, headers=HEADERS)
-    except:
-        print("session对话错误")
-        error = {
-            "code": 4001,
-            "message": "Session Error"
-        }
-        error = json.dumps(error)
-        return HttpResponse(content=error, content_type='application/json')
-    s = json.loads(req.text)
-    try:
-        if s["zc"]==None:
-            s["zc"]=1
-    except:
-        error = {
-            "code": 4006,
-            "message": "QZ Error"
-        }
-        error = json.dumps(error)
-        print(error)
-        return HttpResponse(content=error, content_type='application/json')
-    params = {
-        "method": "getKbcxAzc",
-        "xnxqid": s["xnxqh"],
-        "zc": s["zc"] if zc == -1 else zc,
-        "xh": _account
-    }
-    try:
-        req = session.get(url, params=params, timeout=5, headers=HEADERS)
-    except:
-        error = {
-            "code": 4006,
-            "message": "QZ Error"
-        }
-        error = json.dumps(error)
-        print(error)
-        return HttpResponse(content=error, content_type='application/json')
+        postbody = request.body
+        json_param = json.loads(postbody.decode())
+        table_ord = json_param.get('table_ord')
+        token = json_param.get("token")
+    except Exception as e:
+        # 处理请求体中参数解析错误的情况
+        error = {"code": 4000, "message": "Invalid Parameters"}
+        return JsonResponse(error)
 
-    print(req.text)
-    table_ord = json.loads(req.text)
 
-    if table_ord[0]==None:
-        return HttpResponse(content="[]", content_type='application/json')
+    table_ord = json.loads(table_ord)
+
 
     # 将爬取到的数据转成前端需要的数据，格式转换
     tablesame = [[-1 for j in range(2)] for k in range(35)]
@@ -356,129 +149,123 @@ def ClassInfo(request):
     table = [[[[] for j in range(5)] for i in range(5)] for k in range(7)]#课程
     flag_i_color = 0  # 进行表的比对，如果same表存在就直接用颜色，不存在就给个新颜色，新颜色用到的
     for newtable in table_ord:
-        get_kcsj = newtable.get("kcsj")
-        cout = int(get_kcsj[3] + get_kcsj[4])
-        cout = int(cout / 2) - 1
-        get_kcmc = newtable.get("kcmc")#课程名称
-        get_jsmc = newtable.get("jsmc")#上课教室
-        get_jsxm = newtable.get("jsxm")#老师名称
-        get_kkzc = newtable.get("kkzc")#上课星期
-        get_kcsj = newtable.get("kcsj")#上课时间
-        # random.randrange(0,12,1)
-        kcsj_day = int(get_kcsj[0]) - 1
-        # 课程名称
-        table[kcsj_day][cout][0] = get_kcmc
-        #上课地址
-        table[kcsj_day][cout][1] = get_jsmc
-        # 老师名称
-        table[kcsj_day][cout][2] = get_jsxm
-        # -------------------------------课程数据表 begin-------------------------------- #
-        # "2-3,16-17"
-        # weekstring="["
-        # dh_fg=get_kkzc.split(',')
-        # for hg_i in len(dh_fg):
-        #     end_fg=dh_fg[hg_i].split('-')
-        #     weekstring=weekstring+"["+end_fg[0]+","+end_fg[1]+"],"
-        # weekstring = weekstring +  "]"
+        try:
+            # 解析课程信息
+            get_kcmc = newtable.get("kcmc")  # 课程名称
+            get_jsmc = newtable.get("jsmc")  # 上课教室
+            get_jsxm = newtable.get("jsxm")  # 老师名称
+            get_kkzc = newtable.get("kkzc")  # 上课星期
+            get_kcsj = newtable.get("kcsj")  # 上课时间
+            # 将课程信息存入表格
+            kcsj_day = int(get_kcsj[0]) - 1
+            cout = int(get_kcsj[3] + get_kcsj[4])
+            cout = int(cout / 2) - 1
+            # 课程名称
+            table[kcsj_day][cout][0] = get_kcmc
+            # 上课地址
+            table[kcsj_day][cout][1] = get_jsmc
+            # 老师名称
+            table[kcsj_day][cout][2] = get_jsxm
 
-        Courseresult = Course.objects.filter(CourseName=get_kcmc,CourseTeacher=get_jsxm)
-        # 所有东西都存储说明我存储了课，这样不会有重复的课
-        # 我没有存储这个课
-        if not Courseresult.exists():
-            NewCourse = Course.objects.create(CourseName=get_kcmc,CourseTeacher=get_jsxm)
-            NewCourse.save()
-            NewCourseTime = CourseTime.objects.create(CourseTime=get_kcsj, CourseWeek=get_kkzc, CourseId=NewCourse,CoursePlace=get_jsmc)
-            NewCourseTime.save()
-        # 我已经存储这个课
-        else:
-            # 现在看看有没有存储这个课的时间
-            Course_result = Course.objects.get(CourseName=get_kcmc,CourseTeacher=get_jsxm)
-            CourseTimeresult=Course_result.coursetime_set.all().values_list('CourseTime')
-            flag_time=True#没有相等的
-            for time_i in CourseTimeresult:
-                if time_i[0]==get_kcsj:
-                    flag_time=False#存在相等的
-                    break
-            # 不存在相等的时间，我要不要记录星期有没有时间相同星期不同？除非后期调课，原来的课调走后面的课然后调到相同时间这时会漏读多读。
-            if flag_time==True:
-                NewCourseTime = CourseTime.objects.create(CourseTime=get_kcsj, CourseWeek=get_kkzc, CourseId=Course_result,CoursePlace=get_jsmc)
+            Courseresult = Course.objects.filter(CourseName=get_kcmc, CourseTeacher=get_jsxm)
+            # 所有东西都存储说明我存储了课，这样不会有重复的课
+            # 我没有存储这个课
+            if not Courseresult.exists():
+                NewCourse = Course.objects.create(CourseName=get_kcmc, CourseTeacher=get_jsxm)
+                NewCourse.save()
+                NewCourseTime = CourseTime.objects.create(CourseTime=get_kcsj, CourseWeek=get_kkzc, CourseId=NewCourse,
+                                                          CoursePlace=get_jsmc)
                 NewCourseTime.save()
+            # 我已经存储这个课
+            else:
+                # 现在看看有没有存储这个课的时间
+                Course_result = Course.objects.get(CourseName=get_kcmc, CourseTeacher=get_jsxm)
+                CourseTimeresult = Course_result.coursetime_set.all().values_list('CourseTime')
+                flag_time = True  # 没有相等的
+                for time_i in CourseTimeresult:
+                    if time_i[0] == get_kcsj:
+                        flag_time = False  # 存在相等的
+                        break
+                # 不存在相等的时间，我要不要记录星期有没有时间相同星期不同？除非后期调课，原来的课调走后面的课然后调到相同时间这时会漏读多读。
+                if flag_time == True:
+                    NewCourseTime = CourseTime.objects.create(CourseTime=get_kcsj, CourseWeek=get_kkzc,
+                                                              CourseId=Course_result,
+                                                              CoursePlace=get_jsmc)
+                    NewCourseTime.save()
 
-
-            # Coursetable = [[[[] for j in range(5)] for i in range(5)] for k in range(7)]
-            # # 课程名称
-            # Coursetable[kcsj_day][cout][0] = get_kcmc
-            # # 上课教室
-            # Coursetable[kcsj_day][cout][1] = get_jsmc
-            # # 老师名称
-            # Coursetable[kcsj_day][cout][2] = get_jsxm
-            # # 上课星期
-            # Coursetable[kcsj_day][cout][3] = get_kkzc
-            # Coursetable_json = json.dumps(Coursetable, ensure_ascii=False, indent=2)
-            # Course_obj = Course.objects.create(CourseName=get_kcmc,CourseTeacher=get_jsxm,CoursePlace=get_jsmc,CourseTime=get_kcsj, CourseWeek=get_kkzc,
-            #                                    CourseTimeDict=Coursetable_json)
-            # Course_obj.save()
-        # --------------------------------课程数据表 end-------------------------------- #
-        # 给颜色
-        for tablesame_i in tablesame:
-            # 进行表的比对，如果same表存在就直接用颜色，不存在就给个新颜色
-            if (tablesame_i[0] == get_kcmc):
-                table[kcsj_day][cout][3] = tablesame_i[1]
-                break
-            if (tablesame_i[0] == -1):
-                tablesame_i[0] = get_kcmc
-                tablesame_i[1] = tablecolor[flag_i_color]
-                flag_i_color += 1
-                table[kcsj_day][cout][3] = tablesame_i[1]
-                break
-    # print(table)
-    str_json = json.dumps(table, ensure_ascii=False, indent=2)
-    # print(str_json)
-    return HttpResponse(content=str_json,content_type='application/json')
+            # 给颜色
+            for tablesame_i in tablesame:
+                if tablesame_i[0] == get_kcmc:
+                    table[kcsj_day][cout][3] = tablesame_i[1]
+                    break
+                if tablesame_i[0] == -1:
+                    tablesame_i[0] = get_kcmc
+                    tablesame_i[1] = tablecolor[flag_i_color]
+                    flag_i_color += 1
+                    if flag_i_color>5:
+                        flag_i_color = flag_i_color % 7
+                    table[kcsj_day][cout][3] = tablesame_i[1]
+                    break
+        except Exception as e:
+            # 添加异常处理机制
+            return HttpResponse(content=f"An error occurred: {e}", status=500)
+    # 将表格转换成 JSON 格式并返回
+    try:
+        str_json = json.dumps(table, ensure_ascii=False, indent=2)
+        return HttpResponse(content=str_json, content_type='application/json')
+    except Exception as e:
+        # 添加异常处理机制
+        return HttpResponse(content=f"An error occurred: {e}", status=500)
 
 def EmptyClassroomInfo(request):
+    # 获取 POST 请求的参数
     postbody = request.body
-    json_param = json.loads(postbody.decode())
+    try:
+        json_param = json.loads(postbody.decode())
+    except json.JSONDecodeError:
+        error = {
+            "code": 4000,
+            "message": "Invalid JSON payload"
+        }
+        return JsonResponse(error, status=400)
+
+    # 获取参数中的账号、密码、cookie 和 idleTime
     _account = json_param.get('account')
     _password = json_param.get('password')
-    cookiesstr = json_param.get("cookiesstr")
     get_cont = json_param.get("cont")
     token = json_param.get("token")
+
+    # 设置请求头中的 token
     HEADERS["token"] = token
-    idleTime = "allday"
 
-    if (get_cont != None):
-        idleTime=get_cont
+    # 设置 idleTime 参数
+    idleTime = "allday" if get_cont is None else get_cont
 
-    try:
-        cookies = requests.utils.cookiejar_from_dict(cookiesstr)
-    except:
-        error = {
-            "code": 4008,
-            "message": "Login Error"
-        }
-        error = json.dumps(error)
-        print(error)
-        return HttpResponse(content=error, content_type='application/json')
+
+
+    # 构造会话对象
     session = requests.Session()
-    session.cookies = cookies
 
+    # 构造请求参数
     params = {
         "method": "getKxJscx",
         "time": datetime.datetime.now().strftime("%Y-%m-%d"),
         "idleTime": idleTime
     }
+
     try:
+        # 发送 GET 请求
         req = session.get(url, params=params, timeout=5, headers=HEADERS)
-    except:
-        print("session对话错误")
+        req.raise_for_status()
+    except requests.exceptions.RequestException as e:
         error = {
             "code": 4001,
             "message": "Session Error"
         }
-        error = json.dumps(error)
-        return HttpResponse(content=error, content_type='application/json')
-    return HttpResponse(content=req,content_type='application/json')
+        return JsonResponse(error, status=400)
+    # 返回 JSON 格式的响应
+    result = {"data": req.json()}
+    return JsonResponse(result, status=200, safe=False)
 
 def GradeInfo(request):
     """
@@ -512,12 +299,11 @@ def GradeInfo(request):
     # 获取必需的参数
     _account = json_param.get('account')
     _password = json_param.get('password')
-    cookiesstr = json_param.get("cookiesstr")
     get_cont = json_param.get("cont")
     token = json_param.get("token")
 
     # 检查必需的参数是否存在
-    if not (_account and _password and cookiesstr and token):
+    if not (_account and _password  and token):
         # 返回缺少参数的错误
         error = {
             "code": 4002,
@@ -533,9 +319,7 @@ def GradeInfo(request):
 
     try:
         # 解析cookies字符串，构建会话
-        cookies = requests.utils.cookiejar_from_dict(cookiesstr)
         session = requests.Session()
-        session.cookies = cookies
 
         # 设置请求参数
         params = {
@@ -577,7 +361,6 @@ def ExamInfo(request):
         json_param = json.loads(postbody.decode())
         _account = json_param.get('account')
         _password = json_param.get('password')
-        cookiesstr = json_param.get("cookiesstr")
         token = json_param.get("token")
     except (json.JSONDecodeError, UnicodeDecodeError) as e:
         error = {
@@ -591,20 +374,9 @@ def ExamInfo(request):
 
     HEADERS["token"] = token
 
-    # 创建会话对象，设置 cookies
-    try:
-        cookies = requests.utils.cookiejar_from_dict(cookiesstr)
-    except:
-        error = {
-            "code": 4008,
-            "message": "Login Error"
-        }
-        error = json.dumps(error)
-        print(error)
-        return HttpResponse(content=error, content_type='application/json', status=400)
+
 
     session = requests.Session()
-    session.cookies = cookies
 
     # 发送 GET 请求获取考试信息
     params = {
@@ -628,17 +400,18 @@ def ExamInfo(request):
 
 #共享课表/成绩路由
 def ReplyShareInfo(request):
-    postbody=request.body
+    postbody = request.body
     print(postbody)
     json_param = json.loads(postbody.decode())
     _account = json_param.get('account')
     _password = json_param.get('password')
     _reply = json_param.get('reply')
     _postnum = json_param.get('postnum')
-    _cont = json_param.get("cont")
+    _cont = json_param.get("cont")#0表示课程，1表示成绩
+
+
     Userresult = User.objects.filter(Snumber=_account)
     Shareresult = Share.objects.filter(Usernumber_id=_account)
-
     #查找登录用户是否注册
     if not Userresult.exists():
         error = {
@@ -972,7 +745,6 @@ def GetShareInfo(request):
     json_param = json.loads(postbody.decode())
     _account = json_param.get('account')
     _password = json_param.get('password')
-    get_cont = json_param.get("content")
     _cont = json_param.get("cont")
 
     Shareresult = Share.objects.filter(Usernumber_id=_account)
@@ -984,8 +756,6 @@ def GetShareInfo(request):
         error = json.dumps(error)
         print(error)
         return HttpResponse(content=error, content_type='application/json')
-
-
     if _cont==0:
         sharestate = Share.objects.filter(Usernumber_id=_account).values('CBindState')
         sharestate = sharestate[0]['CBindState']
@@ -1013,113 +783,12 @@ def GetShareInfo(request):
             sharepassword = sharepassword[0]['PasswordQZ']
 
         params = {
-            "method": "authUser",
-            "xh": shareaccount,
-            "pwd": sharepassword
+            "account": shareaccount,
+            "pwd": sharepassword,
+            "code": 200
         }
-        session = requests.Session()
-        try:
-            req = session.get(url, params=params, timeout=5, headers=HEADERS)
-            s = json.loads(req.text)
-        except:
-            error = {
-                "code": 4007,
-                "message": "Quickly Request"
-            }
-            error = json.dumps(error)
-            print(error)
-            return HttpResponse(content=error, content_type='application/json')
-        if s["flag"] != "1":
-            error = {
-                "code": 4000,
-                "message": "Invalid Login"
-            }
-            error = json.dumps(error)
-            return HttpResponse(content=error, content_type='application/json')
-        HEADERS["token"] = s["token"]
-        zc = -1
-        if (get_cont != None):
-            zc = get_cont
-        params = {
-            "method": "getCurrentTime",
-            "currDate": datetime.datetime.now().strftime("%Y-%m-%d")
-        }
-
-        try:
-            req = session.get(url, params=params, timeout=5, headers=HEADERS)
-        except:
-            error = {
-                "code": 4006,
-                "message": "QZ Error"
-            }
-            error = json.dumps(error)
-            print(error)
-            return HttpResponse(content=error, content_type='application/json')
-        s = json.loads(req.text)
-        params = {
-            "method": "getKbcxAzc",
-            "xnxqid": s["xnxqh"],
-            "zc": s["zc"] if zc == -1 else zc,
-            "xh": shareaccount
-        }
-        try:
-            req = session.get(url, params=params, timeout=5, headers=HEADERS)
-        except:
-            print("session对话错误")
-            error = {
-                "code": 4001,
-                "message": "Session Error"
-            }
-            error = json.dumps(error)
-            return HttpResponse(content=error, content_type='application/json')
-        print(req)
-
-        # 将爬取到的数据转成前端需要的数据，格式转换
-        table_ord = json.loads(req.text)
-        if table_ord[0] == None:
-            return HttpResponse(content="[]", content_type='application/json')
-        print(table_ord)
-        # color随机选择莫兰迪色
-        tablecolor = ["#849B91", "#B4746B", "#99857E", "#91A0A5"
-            , "#A79A89", "#8A95A9", "#9AA690", "#B4746B", "#AB545A"
-            , "#B77F70", "#9FABB9", "#B57C82", "#686789"]
-        # color随机选择apple超级亮色
-        # tablecolor = ["#FF6961", "#FFB340", "#FFD426", "#30DB5B", "#70D7FF"
-        #     , "#409CFF", "#707AFF", "#DA8FFF", "#FF6482"]
-        # tablecolor = ["#D70015", "#C93400", "#B25000", "#248A3D", "#0071A4"
-        #     , "#0040DD", "#3634A3", "#8944AB", "#D30F45"]
-        # 分割将class转换成数组返回
-        table = [[[[] for j in range(5)] for i in range(5)] for k in range(7)]
-        tablesame = [[-1 for j in range(2)] for k in range(35)]
-        flag_i_color = 0  # 进行表的比对，如果same表存在就直接用颜色，不存在就给个新颜色，新颜色用到的
-        for newtable in table_ord:
-            get_kcsj = newtable.get("kcsj")
-            cout = int(get_kcsj[3] + get_kcsj[4])
-            cout = int(cout / 2) - 1
-            get_kcmc = newtable.get("kcmc")
-            get_jsmc = newtable.get("jsmc")
-            get_jsxm = newtable.get("jsxm")
-            # random.randrange(0,12,1)
-            kcsj_day = int(get_kcsj[0]) - 1
-            table[kcsj_day][cout][0] = get_kcmc
-            table[kcsj_day][cout][1] = get_jsmc
-            table[kcsj_day][cout][2] = get_jsxm
-
-            for tablesame_i in tablesame:
-                # 进行表的比对，如果same表存在就直接用颜色，不存在就给个新颜色
-                if (tablesame_i[0] == get_kcmc):
-                    table[kcsj_day][cout][3] = tablesame_i[1]
-                    break
-                if (tablesame_i[0] == -1):
-                    tablesame_i[0] = get_kcmc
-                    tablesame_i[1] = tablecolor[flag_i_color]
-                    flag_i_color += 1
-                    table[kcsj_day][cout][3] = tablesame_i[1]
-                    break
-        # print(table)
-        str_json = json.dumps(table, ensure_ascii=False, indent=2)
-        # print(str_json)
-        return HttpResponse(content=str_json,content_type='application/json')
+        info = json.dumps(params)
+        return HttpResponse(content=info,content_type='application/json')
     elif _cont == 1:
         sharestate = Share.objects.filter(Usernumber_id=_account).values('GBindState')
         sharestate = sharestate[0]['GBindState']
@@ -1146,50 +815,14 @@ def GetShareInfo(request):
         else:
             sharepassword = User.objects.filter(Snumber=shareaccount).values('PasswordQZ')
             sharepassword = sharepassword[0]['PasswordQZ']
+
         params = {
-            "method": "authUser",
-            "xh": shareaccount,
-            "pwd": sharepassword
+            "account": shareaccount,
+            "pwd": sharepassword,
+            "code": 200
         }
-        session = requests.Session()
-        try:
-            req = session.get(url, params=params, timeout=5, headers=HEADERS)
-        except:
-            print("session对话错误")
-            error = {
-                "code": 4001,
-                "message": "Session Error"
-            }
-            error = json.dumps(error)
-            return HttpResponse(content=error, content_type='application/json')
-        s = json.loads(req.text)
-        if s["flag"] != "1":
-            error = {
-                "code": 4000,
-                "message": "Invalid Login"
-            }
-            error = json.dumps(error)
-            return HttpResponse(content=error, content_type='application/json')
-        HEADERS["token"] = s["token"]
-        sy = ""
-        if (get_cont != None):
-            sy = get_cont
-        params = {
-            "method": "getCjcx",
-            "xh": shareaccount,
-            "xnxqid": sy
-        }
-        try:
-            req = session.get(url, params=params, timeout=5, headers=HEADERS)
-        except:
-            print("session对话错误")
-            error = {
-                "code": 4001,
-                "message": "Session Error"
-            }
-            error = json.dumps(error)
-            return HttpResponse(content=error, content_type='application/json')
-        return HttpResponse(content=req, content_type='application/json')
+        info = json.dumps(params)
+        return HttpResponse(content=info, content_type='application/json')
 #小科通讯录
 
 def GetPhonebookInfo(request):
@@ -1494,3 +1127,362 @@ def GetCourselib(request):
 #         return HttpResponse(content=str_json, content_type='application/json')
 # 如何区分教学楼和教室？
 # 教室的表现形式是什么
+
+
+
+#废弃区
+def LogininfoQZ(request):
+    # 检验POST
+    if request.method != 'POST':
+        error = {
+            "code": 4000,
+            "message": "Invalid Request Method"
+        }
+        return HttpResponse(content=json.dumps(error), content_type='application/json', status=400)
+    # 读取POST请求的数据
+    try:
+        post_data = json.loads(request.body.decode())
+    except json.JSONDecodeError:
+        error = {
+            "code": 4001,
+            "message": "Invalid Request Body"
+        }
+        return HttpResponse(content=json.dumps(error), content_type='application/json', status=400)
+    account = post_data.get('account')
+    password = post_data.get('password')
+    if not all([account, password]):
+        error = {
+            "code": 4002,
+            "message": "Missing Account or Password"
+        }
+        return HttpResponse(content=json.dumps(error), content_type='application/json', status=400)
+
+    #构造请求参数
+    params = {
+        "method": "authUser",
+        "xh": account,
+        "pwd": password
+    }
+    global HEADERS, url
+    session = requests.Session()
+    try:
+        req = session.get(url, params=params, timeout=5, headers=HEADERS)
+        s = req.json()
+    except requests.exceptions.RequestException:
+        # 如果请求出错，返回4001错误
+        error = {"code": 4001, "message": "Session Error"}
+        return JsonResponse(error, status=400)
+    # 检查是否登录成功
+    if s.get("flag") != "1":
+        # 如果登录不成功，返回400错误
+        error = {"code": 4000, "message": "Invalid Login"}
+        return JsonResponse(error, status=400)
+    # 保存cookie
+    session_token = s.get("token")
+    print(session_token)
+    # 返回cookie和token
+    response_data = {
+        "token": session_token
+    }
+    return HttpResponse(content=json.dumps(response_data), content_type='application/json')
+def ClassInfoQZ(request):
+    global url,HEADERS
+    # 获取请求体中的参数
+    try:
+        postbody = request.body
+        json_param = json.loads(postbody.decode())
+        _account = json_param.get('account')
+        _password = json_param.get('password')
+        zc = json_param.get("cont", -1)
+        token = json_param.get("token")
+        HEADERS["token"] = token
+    except Exception as e:
+        # 处理请求体中参数解析错误的情况
+        error = {"code": 4000, "message": "Invalid Parameters"}
+        return JsonResponse(error)
+    # 建立一个 requests session 并设置 cookies
+    session = requests.Session()
+
+    # 请求接口，获取当前学期和周次信息
+    params = {"method": "getCurrentTime", "currDate": datetime.datetime.now().strftime("%Y-%m-%d")}
+    try:
+        req = session.get(url, params=params, timeout=15, headers=HEADERS)
+        s = json.loads(req.text)
+        # 处理获取周次信息失败的情况
+        if s.get("zc") is None:
+            error = {"code": 4006, "message": "QZ Error"}
+            return JsonResponse(error)
+    except Exception as e:
+        print("请求错误：", e)  # 输出异常信息
+        # 处理 session 对话错误的情况
+        error = {"code": 4001, "message": "Session Error"}
+        return JsonResponse(error)
+
+    # 获取到当前学期和周次信息后，请求获取课表数据接口
+    params = {"method": "getKbcxAzc", "xnxqid": s["xnxqh"], "zc": s["zc"] if zc == -1 else zc, "xh": _account}
+    try:
+        req = session.get(url, params=params, timeout=15, headers=HEADERS)
+        table_ord = json.loads(req.text)
+        print(req.text)
+        # 处理获取课表数据失败的情况
+        if table_ord[0] is None:
+            return JsonResponse([])
+    except Exception as e:
+        # 处理获取课表数据错误的情况
+        print("请求错误：", e)  # 输出异常信息
+        error = {"code": 4001, "message": "Session Error"}
+        return JsonResponse(error)
+
+
+
+    # 将爬取到的数据转成前端需要的数据，格式转换
+    tablesame = [[-1 for j in range(2)] for k in range(35)]
+    # color随机选择颜色
+    tablecolor = ["#ebb5cc", "#b2c196", "#edd492", "#fee5a3"
+        , "#e9daa3", "#ea7375", "#a286ea", "#776fdf", "#7bc6e6"
+        , "#efb293"]
+    # # color随机选择莫兰迪色
+    # tablecolor = ["#849B91", "#B4746B", "#99857E", "#91A0A5"
+    #     , "#A79A89", "#8A95A9", "#9AA690", "#B4746B", "#AB545A"
+    #     , "#B77F70", "#9FABB9", "#B57C82", "#686789"]
+    # color随机选择apple超级亮色
+    # tablecolor = ["#FF6961", "#FFB340", "#FFD426", "#30DB5B", "#70D7FF"
+    #     , "#409CFF", "#707AFF", "#DA8FFF", "#FF6482"]
+    # tablecolor = ["#D70015", "#C93400", "#B25000", "#248A3D", "#0071A4"
+    #     , "#0040DD", "#3634A3", "#8944AB", "#D30F45"]
+    # 分割将class转换成数组返回
+    table = [[[[] for j in range(5)] for i in range(5)] for k in range(7)]#课程
+    flag_i_color = 0  # 进行表的比对，如果same表存在就直接用颜色，不存在就给个新颜色，新颜色用到的
+    for newtable in table_ord:
+        try:
+            # 解析课程信息
+            get_kcmc = newtable.get("kcmc")  # 课程名称
+            get_jsmc = newtable.get("jsmc")  # 上课教室
+            get_jsxm = newtable.get("jsxm")  # 老师名称
+            get_kkzc = newtable.get("kkzc")  # 上课星期
+            get_kcsj = newtable.get("kcsj")  # 上课时间
+            # 将课程信息存入表格
+            kcsj_day = int(get_kcsj[0]) - 1
+            cout = int(get_kcsj[3] + get_kcsj[4])
+            cout = int(cout / 2) - 1
+            # 课程名称
+            table[kcsj_day][cout][0] = get_kcmc
+            # 上课地址
+            table[kcsj_day][cout][1] = get_jsmc
+            # 老师名称
+            table[kcsj_day][cout][2] = get_jsxm
+
+            Courseresult = Course.objects.filter(CourseName=get_kcmc, CourseTeacher=get_jsxm)
+            # 所有东西都存储说明我存储了课，这样不会有重复的课
+            # 我没有存储这个课
+            if not Courseresult.exists():
+                NewCourse = Course.objects.create(CourseName=get_kcmc, CourseTeacher=get_jsxm)
+                NewCourse.save()
+                NewCourseTime = CourseTime.objects.create(CourseTime=get_kcsj, CourseWeek=get_kkzc, CourseId=NewCourse,
+                                                          CoursePlace=get_jsmc)
+                NewCourseTime.save()
+            # 我已经存储这个课
+            else:
+                # 现在看看有没有存储这个课的时间
+                Course_result = Course.objects.get(CourseName=get_kcmc, CourseTeacher=get_jsxm)
+                CourseTimeresult = Course_result.coursetime_set.all().values_list('CourseTime')
+                flag_time = True  # 没有相等的
+                for time_i in CourseTimeresult:
+                    if time_i[0] == get_kcsj:
+                        flag_time = False  # 存在相等的
+                        break
+                # 不存在相等的时间，我要不要记录星期有没有时间相同星期不同？除非后期调课，原来的课调走后面的课然后调到相同时间这时会漏读多读。
+                if flag_time == True:
+                    NewCourseTime = CourseTime.objects.create(CourseTime=get_kcsj, CourseWeek=get_kkzc,
+                                                              CourseId=Course_result,
+                                                              CoursePlace=get_jsmc)
+                    NewCourseTime.save()
+
+            # 给颜色
+            for tablesame_i in tablesame:
+                if tablesame_i[0] == get_kcmc:
+                    table[kcsj_day][cout][3] = tablesame_i[1]
+                    break
+                if tablesame_i[0] == -1:
+                    tablesame_i[0] = get_kcmc
+                    tablesame_i[1] = tablecolor[flag_i_color]
+                    flag_i_color += 1
+                    if flag_i_color>5:
+                        flag_i_color = flag_i_color % 7
+                    table[kcsj_day][cout][3] = tablesame_i[1]
+                    break
+        except Exception as e:
+            # 添加异常处理机制
+            return HttpResponse(content=f"An error occurred: {e}", status=500)
+    # 将表格转换成 JSON 格式并返回
+    try:
+        str_json = json.dumps(table, ensure_ascii=False, indent=2)
+        return HttpResponse(content=str_json, content_type='application/json')
+    except Exception as e:
+        # 添加异常处理机制
+        return HttpResponse(content=f"An error occurred: {e}", status=500)
+
+
+def StudentInfoQZ(request):
+    # 解析请求体
+    if request.method != 'POST':
+        error = {
+            "code": 4003,
+            "message": "Invalid request method"
+        }
+        error = json.dumps(error)
+        return HttpResponse(content=error, content_type='application/json')
+
+    try:
+        json_param = json.loads(request.body.decode())
+        _account = json_param.get('account')
+        _password = json_param.get('password')
+        token=json_param.get("token")
+        HEADERS["token"] = token
+    except json.decoder.JSONDecodeError:
+        error = {
+            "code": 4000,
+            "message": "Invalid request body"
+        }
+        error = json.dumps(error)
+        return HttpResponse(content=error, content_type='application/json')
+
+
+
+    session = requests.Session()
+
+    params = {
+        "method": "getUserInfo",
+        "xh": _account
+    }
+
+
+    HEADERS["token"] = token
+    print(HEADERS)
+
+    try:
+        req = session.get(url, params=params, timeout=5, headers=HEADERS)
+    except:
+        error = {
+            "code": 4001,
+            "message": "Session Error"
+        }
+        error = json.dumps(error)
+        return HttpResponse(content=error, content_type='application/json')
+
+    data = json.loads(req.text)
+    if data.get('token') == '-1':
+        error = {
+            "code": 4009,
+            "message": "Token=-1"
+        }
+        error = json.dumps(error)
+        return HttpResponse(content=error, content_type='application/json')
+    elif req.status_code != 200:
+        error = {
+            "code": 4004,
+            "message": "Bad Request"
+        }
+        error = json.dumps(error)
+        return HttpResponse(content=error, content_type='application/json')
+
+    print(req.text)
+    # 更新用户信息
+    try:
+        user_obj = User.objects.get(Snumber=_account)
+    except User.DoesNotExist:
+       user_obj = User.objects.create(Snumber=int(data.get('xh', '')), Name=data.get('xm', ''), PasswordQZ=_password,
+                                           Classname=data.get('bj', ''), Majorname=data.get('zymc', ''), Collegename=data.get('yxmc', ''),
+                                           Enteryear=int(data.get('rxnf', '')), Gradenumber=int(data.get('usertype', '')))
+       user_obj.save()
+       print("对新用户进行了创建用户表操作")
+    else:
+        if user_obj.PasswordQZ != _password:
+            user_obj.PasswordQZ = _password
+            user_obj.save()
+            print("对新用户进行了更新密码的操作")
+
+    share_obj, created = Share.objects.get_or_create(Usernumber_id=_account)
+    # 创建共享表
+    if created:
+        print("对新用户进行了创建共享表操作")
+    else:
+        print("共享表已存在")
+
+    if req.status_code == 200:
+        data = json.loads(req.text)
+        return JsonResponse(data, safe=False)
+    else:
+        error = {
+            "code": 4004,
+            "message": "Bad Request"
+        }
+        error = json.dumps(error)
+        return HttpResponse(content=error, content_type='application/json')
+
+def CurrentTimeQZ(request):
+    """
+    获取当前时间的视图函数
+    """
+    if request.method == "POST":
+        # 从请求体中解析参数
+        try:
+            json_param = json.loads(request.body.decode())
+        except json.JSONDecodeError:
+            error = {
+                "code": 4000,
+                "message": "Invalid JSON format"
+            }
+            return HttpResponse(json.dumps(error), content_type='application/json', status=400)
+
+        # 检查必要参数
+        _account = json_param.get('account')
+        _password = json_param.get('password')
+        token = json_param.get("token")
+        if not (_account and _password  and token):
+            error = {
+                "code": 4002,
+                "message": "Missing parameter"
+            }
+            return HttpResponse(json.dumps(error), content_type='application/json', status=400)
+
+        # 设置请求头
+        HEADERS["token"] = token
+
+        # 解析 cookie 字符串并创建会话
+        try:
+
+            session = requests.Session()
+        except:
+            error = {
+                "code": 4008,
+                "message": "Login Error"
+            }
+            return HttpResponse(json.dumps(error), content_type='application/json', status=400)
+
+        # 构造 GET 请求参数
+        params = {
+            "method": "getCurrentTime",
+            "currDate": datetime.datetime.now().strftime("%Y-%m-%d")
+        }
+
+        # 发送请求
+        try:
+            req = session.get(url, params=params, timeout=5, headers=HEADERS)
+            req.raise_for_status()  # 检查响应状态码是否为 200
+        except requests.exceptions.RequestException as e:
+            error = {
+                "code": 4001,
+                "message": "Session Error"
+            }
+            return HttpResponse(json.dumps(error), content_type='application/json', status=400)
+
+        # 返回响应结果
+        return HttpResponse(req.content, content_type='application/json')
+
+    else:
+        error = {
+            "code": 4003,
+            "message": "Invalid request method"
+        }
+        return HttpResponse(json.dumps(error), content_type='application/json', status=405)
