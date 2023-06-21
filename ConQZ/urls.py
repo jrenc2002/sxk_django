@@ -23,7 +23,9 @@ urlpatterns = [
     path('share-dept/quit/', views.QuitDept, name='quit_dept'),
     path('share-dept/dis/', views.DismissDept, name='dismiss_dept'),
     path('share-dept/kick/', views.KickDept, name='kick_dept'),
+    path('share-dept/get/', views.GetDeptInfo, name='kick_dept'),
     path('share-week/state/', views.GetWeekPostState, name='get_week_post_state'),
+
     # 电话簿信息
     path('phonebook-info/', views.GetPhonebookInfo, name='phonebook-info'),
     # 课程库信息

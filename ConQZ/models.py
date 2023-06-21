@@ -37,8 +37,10 @@ class Share(models.Model):
     deleted = models.DateTimeField(blank=True, null=True)
 
 class DepartmentClass(models.Model):
-    # 部门ID
+
     id = models.AutoField(primary_key=True)
+    # 部门名称
+    departName = models.CharField(max_length=50, verbose_name='部门名称')
     creatornum = models.ForeignKey('User', on_delete=models.CASCADE, verbose_name='创建者学号')
     invitecode = models.CharField(max_length=20, unique=True,blank=True, null=True)
     created = models.DateTimeField(auto_now_add=True)

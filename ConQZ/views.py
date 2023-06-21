@@ -307,10 +307,10 @@ def ReplyShareState(request):
     # 查找用户是否存在
     try:
         Userresult = User.objects.filter(Snumber=_account)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "DB Error"
+            "message": f"DB Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
     if not Userresult.exists():
@@ -322,10 +322,10 @@ def ReplyShareState(request):
         # 查找共享表是否存在
     try:
         Shareresult = Share.objects.filter(Usernumber_id=_account)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "DB Error"
+            "message": f"DB Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
     if not Shareresult.exists():
@@ -552,10 +552,10 @@ def PostShareState(request):
         if not auth_by_snumber(_account, token):
             error = {"code": 4000, "message": "TOKEN Error"}
             return JsonResponse(error, status=400)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "TOKEN Error"
+            "message": f"TOKEN Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
 
@@ -563,10 +563,10 @@ def PostShareState(request):
     # 查找用户是否存在
     try:
         Userresult = User.objects.filter(Snumber=_account)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "DB Error"
+            "message": f"DB Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
     if not Userresult.exists():
@@ -579,10 +579,10 @@ def PostShareState(request):
     # 查找共享表是否存在
     try:
         Shareresult = Share.objects.filter(Usernumber_id=_account)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "DB Error"
+            "message": f"DB Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
     if not Shareresult.exists():
@@ -598,10 +598,10 @@ def PostShareState(request):
     # 查找对方用户是否存在
     try:
         UserresultPost = User.objects.filter(Snumber=_postnum)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "DB Error"
+            "message": f"DB Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
     if not UserresultPost.exists():
@@ -827,20 +827,20 @@ def GetShareState(request):
         if not auth_by_snumber(_account, token):
             error = {"code": 4000, "message": "TOKEN Error"}
             return JsonResponse(error, status=400)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "TOKEN Error"
+            "message": f"TOKEN Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
 
     # 查找用户是否存在
     try:
         Userresult = User.objects.filter(Snumber=_account)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "DB Error"
+            "message": f"DB Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
     if not Userresult.exists():
@@ -853,10 +853,10 @@ def GetShareState(request):
         # 查找共享表是否存在
     try:
         Shareresult = Share.objects.filter(Usernumber_id=_account)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "DB Error"
+            "message": f"DB Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
     if not Shareresult.exists():
@@ -875,15 +875,16 @@ def GetShareState(request):
         data = serializers.serialize("json", Share.objects.filter(Usernumber_id=_account))
         data_json = json.loads(data)
         data_json = json.dumps(data_json[0]['fields'])
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "DB Error"
+            "message": f"DB Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
 
     return HttpResponse(content=data_json, content_type='application/json')
 
+# 部门课表
 def CreateDept(request):
     # 获取请求体
     try:
@@ -901,6 +902,7 @@ def CreateDept(request):
         cont = json_param.get("cont")
         account = json_param.get('account')
         token = json_param.get("token")
+        name = json_param.get("name")
     except:
         error = {
             "code": 4004,
@@ -913,22 +915,69 @@ def CreateDept(request):
         if not auth_by_snumber(account, token):
             error = {"code": 4000, "message": "TOKEN Error"}
             return JsonResponse(error, status=400)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "TOKEN Error"
+            "message": f"TOKEN Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
-
-    # 查找用户已创建的部门数
+    # 查询用户绑定信息
     try:
-        dept_count = DepartmentClass.objects.filter(creatornum=account).count()
+        share = Share.objects.get(Usernumber=account)
     except:
         error = {
             "code": 4004,
             "message": "DB Error"
         }
         return JsonResponse(error, status=400)
+    # 查询用户的部门槽是否创建了部门
+    try:
+        if cont == 'A':
+            if share.BindDepartA is not None:
+                error = {
+                    "code": 4004,
+                    "message": "部门槽A已被占用"
+                }
+                return JsonResponse(error, status=400)
+        elif cont == 'B':
+            if share.BindDepartB is not None:
+                error = {
+                    "code": 4004,
+                    "message": "部门槽B已被占用"
+                }
+                return JsonResponse(error, status=400)
+        elif cont == 'C':
+            if share.BindDepartC is not None:
+                error = {
+                    "code": 4004,
+                    "message": "部门槽C已被占用"
+                }
+                return JsonResponse(error, status=400)
+        elif cont == 'D':
+            if share.BindDepartD is not None:
+                error = {
+                    "code": 4004,
+                    "message": "部门槽D已被占用"
+                }
+                return JsonResponse(error, status=400)
+    except:
+        error = {
+            "code": 4004,
+            "message": "DB Error"
+        }
+        return JsonResponse(error, status=400)
+
+    # 查找用户已创建的部门数
+    try:
+        dept_count = DepartmentClass.objects.filter(creatornum=account).count()
+    except Exception as e:
+        error = {
+            "code": 4004,
+            "message": f"DB Error: {str(e)}"
+        }
+        return JsonResponse(error, status=400)
+
+
 
     # 如果部门数小于4,可以创建新部门
     if dept_count < 4:
@@ -937,6 +986,9 @@ def CreateDept(request):
             dept = DepartmentClass.objects.create(creatornum_id=account)
             dept_id_encrypt = generate_code(int(dept.id))
             dept.invitecode = dept_id_encrypt
+            #部门字段departName名称重命名为name
+            print(name)
+            dept.departName  = name
             dept.save()
         except:
             error = {
@@ -954,7 +1006,6 @@ def CreateDept(request):
                 "message": "DB Error"
             }
             return JsonResponse(error, status=400)
-
             # 进行绑定操作
         try:
             if cont == 'A':
@@ -1007,10 +1058,10 @@ def JoinDept(request):
         if not auth_by_snumber(account, token):
             error = {"code": 4000, "message": "TOKEN Error"}
             return JsonResponse(error, status=400)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "TOKEN Error"
+            "message": f"TOKEN Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
 
@@ -1020,20 +1071,20 @@ def JoinDept(request):
     except DepartmentClass.DoesNotExist:
         error = {"code": 4001, "message": "邀请码不存在"}
         return JsonResponse(error, status=400)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "DB Error"
+            "message": f"DB Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
 
     # 查询用户绑定信息
     try:
         share = Share.objects.get(Usernumber=account)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "DB Error"
+            "message": f"DB Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
 
@@ -1048,10 +1099,10 @@ def JoinDept(request):
         elif cont == 'D':
             share.BindDepartD = code
         share.save()
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "DB Error"
+            "message": f"DB Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
 
@@ -1086,10 +1137,10 @@ def DismissDept(request):
         if not auth_by_snumber(account, token):
             error = {"code": 4000, "message": "TOKEN Error"}
             return JsonResponse(error, status=400)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "TOKEN Error"
+            "message": f"TOKEN Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
 
@@ -1099,10 +1150,10 @@ def DismissDept(request):
     except DepartmentClass.DoesNotExist:
         error = {"code": 4001, "message": "邀请码不存在"}
         return JsonResponse(error, status=400)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "DB Error"
+            "message": f"DB Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
 
@@ -1111,30 +1162,30 @@ def DismissDept(request):
         if dept.creatornum_id != int(account):
             error = {'error': '无权限解散该部门!'}
             return JsonResponse(error, status=400)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "DB Error"
+            "message": f"DB Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
 
     # 删除部门记录
     try:
         dept.delete()
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "DB Error"
+            "message": f"DB Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
 
     # 查询用户绑定信息
     try:
         shares = Share.objects.filter()
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "DB Error"
+            "message": f"DB Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
 
@@ -1144,10 +1195,10 @@ def DismissDept(request):
         shares.filter(BindDepartB=code).update(BindDepartB=None)
         shares.filter(BindDepartC=code).update(BindDepartC=None)
         shares.filter(BindDepartD=code).update(BindDepartD=None)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "DB Error"
+            "message": f"DB Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
     return JsonResponse({'success': True})
@@ -1181,20 +1232,20 @@ def QuitDept(request):
         if not auth_by_snumber(account, token):
             error = {"code": 4000, "message": "TOKEN Error"}
             return JsonResponse(error, status=400)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "TOKEN Error"
+            "message": f"TOKEN Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
 
     # 查询用户绑定信息
     try:
         share = Share.objects.get(Usernumber=account)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "DB Error"
+            "message": f"DB Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
 
@@ -1209,10 +1260,10 @@ def QuitDept(request):
         elif cont == 'D':
             share.BindDepartD = None
         share.save()
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "DB Error"
+            "message": f"DB Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
 
@@ -1232,7 +1283,7 @@ def KickDept(request):
 
     # 获取请求参数
     try:
-        cont = json_param.get("cont") # 被踢出的用户名称
+        cont = json_param.get("cont") # 被踢出的用户学号
         code = json_param.get('code')
         account = json_param.get('account')
         token = json_param.get("token")
@@ -1248,10 +1299,10 @@ def KickDept(request):
         if not auth_by_snumber(account, token):
             error = {"code": 4000, "message": "TOKEN Error"}
             return JsonResponse(error, status=400)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "TOKEN Error"
+            "message": f"TOKEN Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
 
@@ -1280,7 +1331,6 @@ def KickDept(request):
         }
         return JsonResponse(error, status=400)
 
-    # 找出dept部门里名称为cont的用户然后解绑
     try:
         share = Share.objects.get(Usernumber=cont)
         if share.BindDepartA == code:
@@ -1292,14 +1342,180 @@ def KickDept(request):
         elif share.BindDepartD == code:
             share.BindDepartD = None
         share.save()
+
+    except Exception as e:
+        error = {
+            "code": 4004,
+            "message": f"DB Error: {str(e)}"
+        }
+        return JsonResponse(error, status=400)
+    return JsonResponse({'success': True})
+
+def GetDeptInfo(request):
+    # 获取请求体
+    try:
+        postbody = request.body
+        json_param = json.loads(postbody.decode())
+    except:
+        error = {
+            "code": 4004,
+            "message": "Invalid Request"
+        }
+        return JsonResponse(error, status=400)
+
+    # 获取请求参数
+    try:
+        # 账号名称
+        account = json_param.get('account')
+        # token名称
+        token = json_param.get("token")
+        # 部门名称
+        cont= json_param.get("cont")
+        # 周次
+        week_number = json_param.get("week_number")
+
+
+    except:
+        error = {
+            "code": 4004,
+            "message": "Invalid Parameters"
+        }
+        return JsonResponse(error, status=400)
+
+    # 验证token
+    try:
+        if not auth_by_snumber(account, token):
+            error = {"code": 4000, "message": "TOKEN Error"}
+            return JsonResponse(error, status=400)
+    except Exception as e:
+        error = {
+            "code": 4004,
+            "message": f"TOKEN Error: {str(e)}"
+        }
+        return JsonResponse(error, status=400)
+
+    # 查找用户是否存在
+    try:
+        Userresult = User.objects.filter(Snumber=account)
+    except Exception as e:
+        error = {
+            "code": 4004,
+            "message": f"DB Error: {str(e)}"
+        }
+        return JsonResponse(error, status=400)
+    if not Userresult.exists():
+        error = {
+            "code": 4001,
+            "message": "Not User"
+        }
+        return JsonResponse(error, status=400)
+
+    # 查找共享表是否存在
+    try:
+        Shareresult = Share.objects.filter(Usernumber_id=account)
     except:
         error = {
             "code": 4004,
             "message": "DB Error"
         }
         return JsonResponse(error, status=400)
-    return JsonResponse({'success': True})
+    if not Shareresult.exists():
+        error = {
+            "code": 4004,
+            "message": "DB Error"
+        }
+        return JsonResponse(error, status=400)
 
+    share_bind_dict = {
+        'A': ('BindDepartA'),
+        'B': ('BindDepartB'),
+        'C': ('BindDepartC'),
+        'D': ('BindDepartD')
+    }
+    # 定位部门记号
+    try:
+        state_field = share_bind_dict[cont]
+    except:
+        error = {
+            "code": 4001,
+            "message": "CONT ERROR"
+        }
+        error = json.dumps(error)
+        return HttpResponse(content=error, content_type='application/json', status=400)
+    #查询共享表字段是否已经绑定部门
+    try:
+        depbind = Share.objects.filter(Usernumber_id=account).values(state_field)
+        depbind = depbind[0][state_field]
+    except:
+        error = {
+            "code": 4004,
+            "message": "Share State Error"
+        }
+        return JsonResponse(error, status=400)
+    if depbind == None:
+        error = {
+            "code": 4005,
+            "message": "bind error"
+        }
+        return JsonResponse(error, status=400)
+
+
+    try:
+        invite = Share.objects.filter(Usernumber_id=account).values(state_field)
+        invitecode = invite[0][state_field]
+        # 去查询Share表所有的BindDepartA,BindDepartB,BindDepartC,BindDepartD字段，将其四个字段中所有值等于invitecode返回到Usernumber的列表中
+        userlist = Share.objects.filter(
+            Q(BindDepartA=invitecode) | Q(BindDepartB=invitecode) | Q(BindDepartC=invitecode) | Q(
+                BindDepartD=invitecode)).values('Usernumber')
+        # 将userlist中的Usernumber值取出来，放到一个列表中
+        userlist = [i['Usernumber'] for i in userlist]
+
+        #根据数组userlist里的Sname值，查询User表的Sname和Name字段，返回一个字典列表
+        userlist = User.objects.filter(Snumber__in=userlist).values('Snumber', 'Name')
+        #将userlist转换成列表
+        userlist = list(userlist)
+        print(userlist)
+
+    except:
+        error = {
+            "code": 4004,
+            "message": "DB Error-"
+        }
+        return JsonResponse(error, status=400)
+
+
+    scheduletable = [[[[[],[]] for j in range(len(userlist)+3)] for i in range(5)] for k in range(7)]  # 课程表
+    #根据列表，分别查询CourseSchedule的week数值的schedule课表数据，然后对每个课表数据进行处理，他是一个三维数组，第一维是五个数据，第二维是一天的五节课程，第三维是每周七天的天数，每个课表数据是一个字典，包含课程名，课程地点，课程周数，课程节数，课程教师，课程类型，我希望如果第一维有存在数据的将其列表的name放入到我table表中。
+    try:
+        for i in range(int(len(userlist))):
+            #schedule读取失败后返回信息
+            try:
+                schedule = CourseSchedule.objects.filter(user=userlist[i]['Snumber'],
+                                                     week_number=week_number).values()
+                # 将schedule转换成从字符串转json
+                schedule = json.loads(schedule[0]['schedule'])
+                print(schedule)
+            except:
+                error = {
+                    "code": 4100,
+                    "message": userlist[i]['Name']+"尚未存入本周课表，请他完成课表上传功能."
+                }
+                return JsonResponse(error, status=400)
+
+            for j in range(7):
+                for k in range(5):
+                    if schedule[j][k][0]:
+                        scheduletable[j][k][i][0] = userlist[i]['Name']
+                        scheduletable[j][k][i][1] = userlist[i]['Snumber']
+    except:
+        error = {
+            "code": 4004,
+            "message": "DB Error"
+        }
+        return JsonResponse(error, status=400)
+    # 将scheduletable转换为json格式，返回数据
+    scheduletable = json.dumps(scheduletable)
+    return HttpResponse(content=scheduletable, content_type='application/json', status=200)
 
 def GetWeekPostState(request):
     # 获取请求体
@@ -1329,30 +1545,30 @@ def GetWeekPostState(request):
         if not auth_by_snumber(account, token):
             error = {"code": 4000, "message": "TOKEN Error"}
             return JsonResponse(error, status=400)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "TOKEN Error"
+            "message": f"TOKEN Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
 
     # 获取用户信息
     try:
         user = User.objects.get(Snumber=account)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "DB Error"
+            "message": f"DB Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
 
     # 获取CourseSchedule表中该用户的所有记录
     try:
         schedule_list = CourseSchedule.objects.filter(user=user)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "DB Error"
+            "message": f"DB Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
 
@@ -1402,8 +1618,6 @@ def GetShareInfo(request):
         account = json_param.get('account')
         # token名称
         token = json_param.get("token")
-        # 区别部门/账号
-        flag= json_param.get("flag")
         # 部门/账号名称
         cont= json_param.get("cont")
         # 周次
@@ -1423,20 +1637,20 @@ def GetShareInfo(request):
         if not auth_by_snumber(account, token):
             error = {"code": 4000, "message": "TOKEN Error"}
             return JsonResponse(error, status=400)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "TOKEN Error"
+            "message": f"TOKEN Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
 
     # 查找用户是否存在
     try:
         Userresult = User.objects.filter(Snumber=account)
-    except:
+    except Exception as e:
         error = {
             "code": 4004,
-            "message": "DB Error"
+            "message": f"DB Error: {str(e)}"
         }
         return JsonResponse(error, status=400)
     if not Userresult.exists():
@@ -1446,235 +1660,103 @@ def GetShareInfo(request):
         }
         return JsonResponse(error, status=400)
 
-    # 如果flag=0，代表是账号
-    if flag == 0:
-        # 查找共享表是否存在
-        try:
-            Shareresult = Share.objects.filter(Usernumber_id=account)
-        except:
-            error = {
-                "code": 4004,
-                "message": "DB Error"
-            }
-            return JsonResponse(error, status=400)
-        if not Shareresult.exists():
-            error = {
-                "code": 4004,
-                "message": "DB Error"
-            }
-            return JsonResponse(error, status=400)
-        # 查找对方用户是否存在
-        try:
-            UserresultPost = User.objects.filter(Snumber=postnum)
-        except:
-            error = {
-                "code": 4004,
-                "message": "DB Error"
-            }
-            return JsonResponse(error, status=400)
-        if not UserresultPost.exists():
-            error = {
-                "code": 4002,
-                "message": "Not User Other"
-            }
-            return JsonResponse(error, status=400)
-
-
-        share_bind_dict = {
-            'A': ('CBindAState', 'CBindANumber'),
-            'B': ('CBindBState', 'CBindBNumber'),
-            'C': ('CBindCState', 'CBindCNumber'),
-            'D': ('CBindDState', 'CBindDNumber'),
-            'E': ('CBindEState', 'CBindENumber')
+    # 查找共享表是否存在
+    try:
+        Shareresult = Share.objects.filter(Usernumber_id=account)
+    except:
+        error = {
+            "code": 4004,
+            "message": "DB Error"
         }
+        return JsonResponse(error, status=400)
+    if not Shareresult.exists():
+        error = {
+            "code": 4004,
+            "message": "DB Error"
+        }
+        return JsonResponse(error, status=400)
+    # 查找对方用户是否存在
+    try:
+        UserresultPost = User.objects.filter(Snumber=postnum)
+    except:
+        error = {
+            "code": 4004,
+            "message": "DB Error"
+        }
+        return JsonResponse(error, status=400)
+    if not UserresultPost.exists():
+        error = {
+            "code": 4002,
+            "message": "Not User Other"
+        }
+        return JsonResponse(error, status=400)
+
+    # 查找对方共享表中相关字段状态是否为0,若为0表示可接收共享
+    try:
+        state_field, number_field = share_bind_dict[cont]
+    except:
+        error = {
+            "code": 4001,
+            "message": "CONT ERROR"
+        }
+        error = json.dumps(error)
+        return HttpResponse(content=error, content_type='application/json', status=400)
+
+    try:
+        sharebind = Share.objects.filter(Usernumber_id=account).values(state_field)
+        sharebind = sharebind[0][state_field]
+    except:
+        error = {
+            "code": 4004,
+            "message": "Share State Error"
+        }
+        return JsonResponse(error, status=400)
+    if sharebind != 3:
+        error = {
+            "code": 4005,
+            "message": "relation error"
+        }
+        return JsonResponse(error, status=400)
         # 查找对方共享表中相关字段状态是否为0,若为0表示可接收共享
-        try:
-            state_field, number_field = share_bind_dict[cont]
-        except:
-            error = {
-                "code": 4001,
-                "message": "CONT ERROR"
-            }
-            error = json.dumps(error)
-            return HttpResponse(content=error, content_type='application/json', status=400)
-
-        try:
-            sharebind = Share.objects.filter(Usernumber_id=account).values(state_field)
-            sharebind = sharebind[0][state_field]
-        except:
-            error = {
-                "code": 4004,
-                "message": "Share State Error"
-            }
-            return JsonResponse(error, status=400)
-        if sharebind != 3:
-            error = {
-                "code": 4005,
-                "message": "relation error"
-            }
-            return JsonResponse(error, status=400)
-            # 查找对方共享表中相关字段状态是否为0,若为0表示可接收共享
-        try:
-            sharebind = Share.objects.filter(Usernumber_id=postnum).values(state_field)
-            sharebind = sharebind[0][state_field]
-        except:
-            error = {
-                "code": 4004,
-                "message": "Share State Error"
-            }
-            return JsonResponse(error, status=400)
-        if sharebind != 3:
-            error = {
-                "code": 4005,
-                "message": "relation error"
-            }
-            return JsonResponse(error, status=400)
-
-        # 返回user为Postman用户的CourseSchedule表的week_number周的schedule数据
-        try:
-            schedule = CourseSchedule.objects.filter(user=postnum, week_number=week_number).values()
-        except:
-            error = {
-                "code": 4004,
-                "message": "DB Erroraaa"
-            }
-            return JsonResponse(error, status=400)
-        if not schedule.exists():
-            error = {
-                "code": 4006,
-                "message": "Not Schedule"
-            }
-            return JsonResponse(error, status=400)
-        #返回schedule的schedule字段
-        schedule = schedule.values('schedule')
-        #将schedule存储的字符串转换为json格式返回
-        schedule = json.loads(schedule[0]['schedule'])
-
-        #返回http的json数据
-        return JsonResponse(schedule, safe=False, status=200)
-
-    # 如果flag=1，代表是部门
-    elif flag == 1:
-        # 查找共享表是否存在
-        try:
-            Shareresult = Share.objects.filter(Usernumber_id=account)
-        except:
-            error = {
-                "code": 4004,
-                "message": "DB Error"
-            }
-            return JsonResponse(error, status=400)
-        if not Shareresult.exists():
-            error = {
-                "code": 4004,
-                "message": "DB Error"
-            }
-            return JsonResponse(error, status=400)
-        # 查找对方用户是否存在
-        try:
-            UserresultPost = User.objects.filter(Snumber=postnum)
-        except:
-            error = {
-                "code": 4004,
-                "message": "DB Error"
-            }
-            return JsonResponse(error, status=400)
-        if not UserresultPost.exists():
-            error = {
-                "code": 4002,
-                "message": "Not User Other"
-            }
-            return JsonResponse(error, status=400)
-
-        share_bind_dict = {
-            'A': ('BindDepartA'),
-            'B': ('BindDepartB'),
-            'C': ('BindDepartC'),
-            'D': ('BindDepartD')
+    try:
+        sharebind = Share.objects.filter(Usernumber_id=postnum).values(state_field)
+        sharebind = sharebind[0][state_field]
+    except:
+        error = {
+            "code": 4004,
+            "message": "Share State Error"
         }
-        # 定位部门记号
-        try:
-            state_field = share_bind_dict[cont]
-        except:
-            error = {
-                "code": 4001,
-                "message": "CONT ERROR"
-            }
-            error = json.dumps(error)
-            return HttpResponse(content=error, content_type='application/json', status=400)
-        #查询共享表字段是否已经绑定部门
-        try:
-            depbind = Share.objects.filter(Usernumber_id=account).values(state_field)
-            depbind = depbind[0][state_field]
-        except:
-            error = {
-                "code": 4004,
-                "message": "Share State Error"
-            }
-            return JsonResponse(error, status=400)
-        if depbind == None:
-            error = {
-                "code": 4005,
-                "message": "bind error"
-            }
-            return JsonResponse(error, status=400)
+        return JsonResponse(error, status=400)
+    if sharebind != 3:
+        error = {
+            "code": 4005,
+            "message": "relation error"
+        }
+        return JsonResponse(error, status=400)
 
+    # 返回user为Postman用户的CourseSchedule表的week_number周的schedule数据
+    try:
+        schedule = CourseSchedule.objects.filter(user=postnum, week_number=week_number).values()
+    except:
+        error = {
+            "code": 4004,
+            "message": "DB Erroraaa"
+        }
+        return JsonResponse(error, status=400)
+    if not schedule.exists():
+        error = {
+            "code": 4006,
+            "message": "Not Schedule"
+        }
+        return JsonResponse(error, status=400)
+    #返回schedule的schedule字段
+    schedule = schedule.values('schedule')
+    #将schedule存储的字符串转换为json格式返回
+    schedule = json.loads(schedule[0]['schedule'])
 
-        try:
-            invite = Share.objects.filter(Usernumber_id=account).values(state_field)
-            invitecode = invite[0][state_field]
-            # 去查询Share表所有的BindDepartA,BindDepartB,BindDepartC,BindDepartD字段，将其四个字段中所有值等于invitecode返回到Usernumber的列表中
-            userlist = Share.objects.filter(
-                Q(BindDepartA=invitecode) | Q(BindDepartB=invitecode) | Q(BindDepartC=invitecode) | Q(
-                    BindDepartD=invitecode)).values('Usernumber')
-            # 将userlist中的Usernumber值取出来，放到一个列表中
-            userlist = [i['Usernumber'] for i in userlist]
+    #返回http的json数据
+    return JsonResponse(schedule, safe=False, status=200)
 
-            #根据数组userlist里的Sname值，查询User表的Sname和Name字段，返回一个字典列表
-            userlist = User.objects.filter(Snumber__in=userlist).values('Snumber', 'Name')
-            #将userlist转换成列表
-            userlist = list(userlist)
-            print(userlist)
-
-        except:
-            error = {
-                "code": 4004,
-                "message": "DB Error-"
-            }
-            return JsonResponse(error, status=400)
-
-
-        scheduletable = [[[[] for j in range(len(userlist)+3)] for i in range(5)] for k in range(7)]  # 课程表
-        #根据列表，分别查询CourseSchedule的week数值的schedule课表数据，然后对每个课表数据进行处理，他是一个三维数组，第一维是五个数据，第二维是一天的五节课程，第三维是每周七天的天数，每个课表数据是一个字典，包含课程名，课程地点，课程周数，课程节数，课程教师，课程类型，我希望如果第一维有存在数据的将其列表的name放入到我table表中。
-        try:
-            for i in range(int(len(userlist))):
-                #schedule读取失败后返回信息
-                try:
-                    schedule = CourseSchedule.objects.filter(user=userlist[i]['Snumber'],
-                                                         week_number=week_number).values()
-                    # 将schedule转换成从字符串转json
-                    schedule = json.loads(schedule[0]['schedule'])
-                    print(schedule)
-                except:
-                    error = {
-                        "code": 4100,
-                        "message": userlist[i]['Name']+"尚未存入本周课表，请他完成课表上传功能."
-                    }
-                    return JsonResponse(error, status=400)
-
-                for j in range(7):
-                    for k in range(5):
-                        if schedule[j][k][0]:
-                            scheduletable[j][k][i] = userlist[i]['Name']
-        except:
-            error = {
-                "code": 4004,
-                "message": "DB Error"
-            }
-            return JsonResponse(error, status=400)
-        # 将scheduletable转换为json格式，返回数据
-        scheduletable = json.dumps(scheduletable)
-        return HttpResponse(content=scheduletable, content_type='application/json', status=200)
 
 
 #小科通讯录
