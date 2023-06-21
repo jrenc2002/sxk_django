@@ -1,10 +1,13 @@
 import datetime
 import json
 import string
+import traceback
 from random import choices, random
 
 from django.contrib.sites import requests
 from django.core import serializers
+from django.core.serializers.json import DjangoJSONEncoder
+from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 import requests as requests
 
@@ -66,14 +69,20 @@ key = [1, 2, 3, 4, 5, 6]
 # 随机生成函数
 characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789&#@'
 
+
 def generate_code(id):
-    code = ''
+    base_code = ''
     for i in range(8):
         index = ((id * 23 + i * 17) % len(characters))
-        code += characters[index]
+        base_code += characters[index]
+    code = base_code
+
+    # 检测invitecode是否唯一,如果不唯一则进行处理
+    while DepartmentClass.objects.filter(invitecode=code).exists():
+        code = base_code + str(id)
+        id += 1
+
     return code
-
-
 
 #登录
 def Logininfo(request):
@@ -108,8 +117,11 @@ def Logininfo(request):
             # 如果 openid 返回成功，读入输入的数据存入数据库，如果有这个用户只更新 Openid，没有这个用户新建表
             try:
                 user_obj = User.objects.get(Snumber=account)
+                print(user_obj.Openid)
                 user_obj.Openid = openid
                 user_obj.save()
+                print(user_obj.Openid)
+                print(openid)
                 print("更新了用户表的 Openid")
             except User.DoesNotExist:
                 user_obj = User.objects.create(Snumber=account, Name=name,
@@ -263,9 +275,7 @@ def PostClassInfo(request):
         schedule.save()
     return JsonResponse({'status': 'success'})
 
-
-
-#共享课表/成绩路由
+#共享课表路由
 
 def ReplyShareState(request):
     # 获取请求体
@@ -346,42 +356,45 @@ def ReplyShareState(request):
             "message": "Invalid course id"
         }
         return JsonResponse(error, status=400)
-    # 查看我是否是接受人
-    try:
-        sharebind = Share.objects.filter(Usernumber_id=_account).values(state_field)
-        sharebind = sharebind[0][state_field]
-    except:
-        error = {
-            "code": 4004,
-            "message": "DB Error"
-        }
-        return JsonResponse(error, status=400)
-    if sharebind != 2:
-        error = {
-            "code": 4005,
-            "message": "relation error"
-        }
-        return JsonResponse(error, status=400)
 
-    # 查看对方是否是发送人
-    try:
-        sharebind = Share.objects.filter(Usernumber_id=_postnum).values(state_field)
-        sharebind = sharebind[0][state_field]
-    except:
-        error = {
-            "code": 4004,
-            "message": "DB Error"
-        }
-        return JsonResponse(error, status=400)
-    if sharebind != 1:
-        error = {
-            "code": 4005,
-            "message": "relation error"
-        }
-        return JsonResponse(error, status=400)
     # 我同意别人请求
     if _reply == True:
         try:
+            # 查看我是否是接受人
+            try:
+                sharebind = Share.objects.filter(Usernumber_id=_account).values(state_field)
+                sharebind = sharebind[0][state_field]
+                print(sharebind)
+            except:
+                error = {
+                    "code": 4004,
+                    "message": "DB Error"
+                }
+                return JsonResponse(error, status=400)
+            if sharebind != 2:
+                error = {
+                    "code": 4005,
+                    "message": "relation error"
+                }
+                return JsonResponse(error, status=400)
+
+            # 查看对方是否是发送人
+            try:
+                sharebind = Share.objects.filter(Usernumber_id=_postnum).values(state_field)
+                sharebind = sharebind[0][state_field]
+                print(sharebind)
+            except:
+                error = {
+                    "code": 4004,
+                    "message": "DB Error"
+                }
+                return JsonResponse(error, status=400)
+            if sharebind != 1:
+                error = {
+                    "code": 4005,
+                    "message": "relation error"
+                }
+                return JsonResponse(error, status=400)
             if _cont == 'A':
                 user_obj = Share.objects.get(Usernumber_id=_account)
                 user_obj.CBindAState = 3
@@ -433,7 +446,7 @@ def ReplyShareState(request):
                     "message": "Invalid course id"
                 }
                 error = json.dumps(error)
-                return HttpResponse(content=error, content_type='application/json')
+                return HttpResponse(content=error, content_type='application/json',status=400)
         except:
             error = {
                 "code": 4004,
@@ -499,7 +512,7 @@ def ReplyShareState(request):
                     "message": "Invalid course id"
                 }
                 error = json.dumps(error)
-                return HttpResponse(content=error, content_type='application/json')
+                return HttpResponse(content=error, content_type='application/json',status=400)
         except:
             error = {
                 "code": 4004,
@@ -613,40 +626,40 @@ def PostShareState(request):
             "message": "CONT ERROR"
         }
         error = json.dumps(error)
-        return HttpResponse(content=error, content_type='application/json')
+        return HttpResponse(content=error, content_type='application/json',status=400)
+    if not _cancel:
         # 查找我的共享表中相关字段状态是否为0,若为0表示可发起共享
-    try:
-        sharebind = Share.objects.filter(Usernumber_id=_account).values(state_field)
-        sharebind = sharebind[0][state_field]
-    except:
-        error = {
-            "code": 4004,
-            "message": "Share State Error"
-        }
-        return JsonResponse(error, status=400)
-    if sharebind != 0:
-        error = {
-            "code": 4005,
-            "message": "relation error"
-        }
-        return JsonResponse(error, status=400)
-
-        # 查找对方共享表中相关字段状态是否为0,若为0表示可接收共享
-    try:
-        sharebind = Share.objects.filter(Usernumber_id=_postnum).values(state_field)
-        sharebind = sharebind[0][state_field]
-    except:
-        error = {
-            "code": 4004,
-            "message": "Share State Error"
-        }
-        return JsonResponse(error, status=400)
-    if sharebind != 0:
-        error = {
-            "code": 4005,
-            "message": "relation error"
-        }
-        return JsonResponse(error, status=400)
+        try:
+            sharebind = Share.objects.filter(Usernumber_id=_account).values(state_field)
+            sharebind = sharebind[0][state_field]
+        except:
+            error = {
+                "code": 4004,
+                "message": "Share State Error"
+            }
+            return JsonResponse(error, status=400)
+        if sharebind != 0:
+            error = {
+                "code": 4005,
+                "message": "relation error"
+            }
+            return JsonResponse(error, status=400)
+            # 查找对方共享表中相关字段状态是否为0,若为0表示可接收共享
+        try:
+            sharebind = Share.objects.filter(Usernumber_id=_postnum).values(state_field)
+            sharebind = sharebind[0][state_field]
+        except:
+            error = {
+                "code": 4004,
+                "message": "Share State Error"
+            }
+            return JsonResponse(error, status=400)
+        if sharebind != 0:
+            error = {
+                "code": 4005,
+                "message": "relation error"
+            }
+            return JsonResponse(error, status=400)
 
     # 看对方有没有注册,鉴权
     # 加上了取消关键词，看这个post是取消还是不取消
@@ -703,14 +716,14 @@ def PostShareState(request):
                    "message": "Invalid course id"
                }
                error = json.dumps(error)
-               return HttpResponse(content=error, content_type='application/json')
+               return HttpResponse(content=error, content_type='application/json',status=400)
        except:
            error = {
                "code": 4004,
                "message": "DB Error"
            }
            error = json.dumps(error)
-           return HttpResponse(content=error, content_type='application/json')
+           return HttpResponse(content=error, content_type='application/json',status=400)
        info = {
            "code": 2000,
            "message": "Prefect"
@@ -723,47 +736,47 @@ def PostShareState(request):
             if _cont == 'A':
                 user_obj = Share.objects.get(Usernumber_id=_account)
                 user_obj.CBindAState = 0
-                user_obj.CBindANumber = _postnum
+                user_obj.CBindANumber = -1
                 user_obj.save()
                 user_obj = Share.objects.get(Usernumber_id=_postnum)
-                user_obj.CBindAState = -1
-                user_obj.CBindANumber = _account
+                user_obj.CBindAState = 0
+                user_obj.CBindANumber = -1
                 user_obj.save()
             elif _cont == 'B':
                 user_obj = Share.objects.get(Usernumber_id=_account)
                 user_obj.CBindBState = 0
-                user_obj.CBindBNumber = _postnum
+                user_obj.CBindBNumber = -1
                 user_obj.save()
                 user_obj = Share.objects.get(Usernumber_id=_postnum)
-                user_obj.CBindBState = -1
-                user_obj.CBindBNumber = _account
+                user_obj.CBindBState = 0
+                user_obj.CBindBNumber = -1
                 user_obj.save()
             elif _cont == 'C':
                 user_obj = Share.objects.get(Usernumber_id=_account)
                 user_obj.CBindCState = 0
-                user_obj.CBindCNumber = _postnum
+                user_obj.CBindCNumber = -1
                 user_obj.save()
                 user_obj = Share.objects.get(Usernumber_id=_postnum)
-                user_obj.CBindCState = -1
-                user_obj.CBindCNumber = _account
+                user_obj.CBindCState = 0
+                user_obj.CBindCNumber = -1
                 user_obj.save()
             elif _cont == 'D':
                 user_obj = Share.objects.get(Usernumber_id=_account)
                 user_obj.CBindDState = 0
-                user_obj.CBindDNumber = _postnum
+                user_obj.CBindDNumber = -1
                 user_obj.save()
                 user_obj = Share.objects.get(Usernumber_id=_postnum)
-                user_obj.CBindDState = -1
-                user_obj.CBindDNumber = _account
+                user_obj.CBindDState = 0
+                user_obj.CBindDNumber = -1
                 user_obj.save()
             elif _cont == 'E':
                 user_obj = Share.objects.get(Usernumber_id=_account)
                 user_obj.CBindEState = 0
-                user_obj.CBindENumber = _postnum
+                user_obj.CBindENumber = -1
                 user_obj.save()
                 user_obj = Share.objects.get(Usernumber_id=_postnum)
-                user_obj.CBindEState = -1
-                user_obj.CBindENumber = _account
+                user_obj.CBindEState = 0
+                user_obj.CBindENumber = -1
                 user_obj.save()
             else:
                 error = {
@@ -771,21 +784,20 @@ def PostShareState(request):
                     "message": "Invalid course id"
                 }
                 error = json.dumps(error)
-                return HttpResponse(content=error, content_type='application/json')
+                return HttpResponse(content=error, content_type='application/json',status=400)
         except:
             error = {
                 "code": 4004,
                 "message": "DB Error"
             }
             error = json.dumps(error)
-            return HttpResponse(content=error, content_type='application/json')
+            return HttpResponse(content=error, content_type='application/json',status=400)
         info = {
             "code": 2000,
             "message": "Prefect"
         }
         info = json.dumps(info)
         return HttpResponse(content=info, content_type='application/json')
-
 
 def GetShareState(request):
     # 获取请求体
@@ -872,265 +884,800 @@ def GetShareState(request):
 
     return HttpResponse(content=data_json, content_type='application/json')
 
-def GetShareInfo(request):
-    global url,HEADERS
-    postbody = request.body
-    print(postbody)
-    json_param = json.loads(postbody.decode())
-    _account = json_param.get('account')
-    _password = json_param.get('password')
-    _cont = json_param.get("cont")
-
-    Shareresult = Share.objects.filter(Usernumber_id=_account)
-    if not Shareresult.exists():
-        error = {
-            "code": 4001,
-            "message": "Not User"
-        }
-        error = json.dumps(error)
-        print(error)
-        return HttpResponse(content=error, content_type='application/json')
-    if _cont==0:
-        sharestate = Share.objects.filter(Usernumber_id=_account).values('CBindState')
-        sharestate = sharestate[0]['CBindState']
-        if sharestate!=3:
-            error = {
-                "code": 4005,
-                "message": "Not Bind"
-            }
-            error = json.dumps(error)
-            print(error)
-            return HttpResponse(content=error, content_type='application/json')
-
-        shareaccount = Share.objects.filter(Usernumber_id=_account).values('CBindNumber')
-        shareaccount=shareaccount[0]['CBindNumber']
-        if shareaccount==-1:
-            error = {
-                "code": 4005,
-                "message": "Not Bind"
-            }
-            error = json.dumps(error)
-            print(error)
-            return HttpResponse(content=error, content_type='application/json')
-        else:
-            sharepassword = User.objects.filter(Snumber=shareaccount).values('PasswordQZ')
-            sharepassword = sharepassword[0]['PasswordQZ']
-
-        params = {
-            "account": shareaccount,
-            "pwd": sharepassword,
-            "code": 200
-        }
-        info = json.dumps(params)
-        return HttpResponse(content=info,content_type='application/json')
-    elif _cont == 1:
-        sharestate = Share.objects.filter(Usernumber_id=_account).values('GBindState')
-        sharestate = sharestate[0]['GBindState']
-        if sharestate!=3:
-            error = {
-                "code": 4005,
-                "message": "Not Bind"
-            }
-            error = json.dumps(error)
-            print(error)
-            return HttpResponse(content=error, content_type='application/json')
-
-        shareaccount = Share.objects.filter(Usernumber_id=_account).values('GBindNumber')
-        shareaccount=shareaccount[0]['GBindNumber']
-
-        if shareaccount==-1:
-            error = {
-                "code": 4005,
-                "message": "Not Bind"
-            }
-            error = json.dumps(error)
-            print(error)
-            return HttpResponse(content=error, content_type='application/json')
-        else:
-            sharepassword = User.objects.filter(Snumber=shareaccount).values('PasswordQZ')
-            sharepassword = sharepassword[0]['PasswordQZ']
-
-        params = {
-            "account": shareaccount,
-            "pwd": sharepassword,
-            "code": 200
-        }
-        info = json.dumps(params)
-        return HttpResponse(content=info, content_type='application/json')
-
 def CreateDept(request):
-    postbody = request.body
-    print(postbody)
-    json_param = json.loads(postbody.decode())
-    cont = json_param.get("cont")
-    account = json_param.get('account')
-    token = json_param.get("token")
+    # 获取请求体
+    try:
+        postbody = request.body
+        json_param = json.loads(postbody.decode())
+    except:
+        error = {
+            "code": 4004,
+            "message": "Invalid Request"
+        }
+        return JsonResponse(error, status=400)
 
-    if not auth_by_snumber(account, token):
-        error = {"code": 4000, "message": "TOKEN Error"}
-        return JsonResponse(error)
+    # 获取请求参数
+    try:
+        cont = json_param.get("cont")
+        account = json_param.get('account')
+        token = json_param.get("token")
+    except:
+        error = {
+            "code": 4004,
+            "message": "Invalid Parameters"
+        }
+        return JsonResponse(error, status=400)
 
-    # 查询用户已创建的部门数
-    dept_count = DepartmentClass.objects.filter(creatornum=account).count()
+    # 验证token
+    try:
+        if not auth_by_snumber(account, token):
+            error = {"code": 4000, "message": "TOKEN Error"}
+            return JsonResponse(error, status=400)
+    except:
+        error = {
+            "code": 4004,
+            "message": "TOKEN Error"
+        }
+        return JsonResponse(error, status=400)
+
+    # 查找用户已创建的部门数
+    try:
+        dept_count = DepartmentClass.objects.filter(creatornum=account).count()
+    except:
+        error = {
+            "code": 4004,
+            "message": "DB Error"
+        }
+        return JsonResponse(error, status=400)
 
     # 如果部门数小于4,可以创建新部门
-    if dept_count <= 4:
+    if dept_count < 4:
         # 创建部门记录
-        dept = DepartmentClass.objects.create(creatornum_id=account)
-        dept_id_encrypt = generate_code(int(dept.id))
-        dept.invitecode = dept_id_encrypt
-        dept.save()
+        try:
+            dept = DepartmentClass.objects.create(creatornum_id=account)
+            dept_id_encrypt = generate_code(int(dept.id))
+            dept.invitecode = dept_id_encrypt
+            dept.save()
+        except:
+            error = {
+                "code": 4004,
+                "message": "DB Error"
+            }
+            return JsonResponse(error, status=400)
+
         # 查询用户绑定信息
-        share = Share.objects.get(Usernumber=account)
-        # 获取部门id并加密
-        if cont == 'A':
-            share.BindDepartA = dept_id_encrypt
-        elif cont == 'B':
-            share.BindDepartB =dept_id_encrypt
-        elif cont == 'C':
-            share.BindDepartC = dept_id_encrypt
-        elif cont == 'D':
-            share.BindDepartD = dept_id_encrypt
-        share.save()
-        # 将加密后的id返回
+        try:
+            share = Share.objects.get(Usernumber=account)
+        except:
+            error = {
+                "code": 4004,
+                "message": "DB Error"
+            }
+            return JsonResponse(error, status=400)
+
+            # 进行绑定操作
+        try:
+            if cont == 'A':
+                share.BindDepartA = dept_id_encrypt
+            elif cont == 'B':
+                share.BindDepartB = dept_id_encrypt
+            elif cont == 'C':
+                share.BindDepartC = dept_id_encrypt
+            elif cont == 'D':
+                share.BindDepartD = dept_id_encrypt
+            share.save()
+        except:
+            error = {
+                "code": 4004,
+                "message": "DB Error"
+            }
+            return JsonResponse(error, status=400)
+
         return JsonResponse({'dept': dept_id_encrypt})
     else:
-        # 否则返回错误信息
         return JsonResponse({'error': 'Over'})
+
 def JoinDept(request):
-    postbody = request.body
-    print(postbody)
-    json_param = json.loads(postbody.decode())
+    # 获取请求体
+    try:
+        postbody = request.body
+        json_param = json.loads(postbody.decode())
+    except:
+        error = {
+            "code": 4004,
+            "message": "Invalid Request"
+        }
+        return JsonResponse(error, status=400)
+
     # 获取请求参数
-    code = json_param.get('code')
-    cont = json_param.get("cont")
-    account = json_param.get('account')
-    token = json_param.get("token")
+    try:
+        code = json_param.get('code')
+        cont = json_param.get("cont")
+        account = json_param.get('account')
+        token = json_param.get("token")
+    except:
+        error = {
+            "code": 4004,
+            "message": "Invalid Parameters"
+        }
+        return JsonResponse(error, status=400)
 
-    if not auth_by_snumber(account, token):
-        error = {"code": 4000, "message": "TOKEN Error"}
-        return JsonResponse(error)
-
+    # 验证token
+    try:
+        if not auth_by_snumber(account, token):
+            error = {"code": 4000, "message": "TOKEN Error"}
+            return JsonResponse(error, status=400)
+    except:
+        error = {
+            "code": 4004,
+            "message": "TOKEN Error"
+        }
+        return JsonResponse(error, status=400)
 
     # 根据邀请码获取部门id
     try:
-        DepartmentClass.objects.get(invitecode=code)
+        dept = DepartmentClass.objects.get(invitecode=code)
     except DepartmentClass.DoesNotExist:
-        error = {"code": 4000, "message": "邀请码不存在"}
-        return JsonResponse(error)
-
+        error = {"code": 4001, "message": "邀请码不存在"}
+        return JsonResponse(error, status=400)
+    except:
+        error = {
+            "code": 4004,
+            "message": "DB Error"
+        }
+        return JsonResponse(error, status=400)
 
     # 查询用户绑定信息
-    share = Share.objects.get(Usernumber=account)
-    # 更新对应绑定部门id
-    if cont == 'A':
-        share.BindDepartA = code
-    elif cont == 'B':
-        share.BindDepartB = code
-    elif cont == 'C':
-        share.BindDepartC = code
-    elif cont == 'D':
-        share.BindDepartD = code
-    # 保存更新
-    share.save()
+    try:
+        share = Share.objects.get(Usernumber=account)
+    except:
+        error = {
+            "code": 4004,
+            "message": "DB Error"
+        }
+        return JsonResponse(error, status=400)
 
-    # 返回成功标识
+        # 进行绑定操作
+    try:
+        if cont == 'A':
+            share.BindDepartA = code
+        elif cont == 'B':
+            share.BindDepartB = code
+        elif cont == 'C':
+            share.BindDepartC = code
+        elif cont == 'D':
+            share.BindDepartD = code
+        share.save()
+    except:
+        error = {
+            "code": 4004,
+            "message": "DB Error"
+        }
+        return JsonResponse(error, status=400)
+
     return JsonResponse({'success': True})
-def DismissDept(request):
-    postbody = request.body
-    json_param = json.loads(postbody.decode())
-    code = json_param.get('code')
-    account = json_param.get('account')
-    token = json_param.get("token")
 
-    if not auth_by_snumber(account, token):
-        error = {"code": 4000, "message": "TOKEN Error"}
-        return JsonResponse(error)
+def DismissDept(request):
+    # 获取请求体
+    try:
+        postbody = request.body
+        json_param = json.loads(postbody.decode())
+    except:
+        error = {
+            "code": 4004,
+            "message": "Invalid Request"
+        }
+        return JsonResponse(error, status=400)
+
+    # 获取请求参数
+    try:
+        code = json_param.get('code')
+        account = json_param.get('account')
+        token = json_param.get("token")
+    except:
+        error = {
+            "code": 4004,
+            "message": "Invalid Parameters"
+        }
+        return JsonResponse(error, status=400)
+
+    # 验证token
+    try:
+        if not auth_by_snumber(account, token):
+            error = {"code": 4000, "message": "TOKEN Error"}
+            return JsonResponse(error, status=400)
+    except:
+        error = {
+            "code": 4004,
+            "message": "TOKEN Error"
+        }
+        return JsonResponse(error, status=400)
 
     # 邀请码解密获取部门id
     try:
-        dept =DepartmentClass.objects.get(invitecode=code)
+        dept = DepartmentClass.objects.get(invitecode=code)
     except DepartmentClass.DoesNotExist:
-        error = {"code": 4000, "message": "邀请码不存在"}
-        return JsonResponse(error)
+        error = {"code": 4001, "message": "邀请码不存在"}
+        return JsonResponse(error, status=400)
+    except:
+        error = {
+            "code": 4004,
+            "message": "DB Error"
+        }
+        return JsonResponse(error, status=400)
 
     # 检验部门创建者是否为当前用户
-    if dept.creatornum_id != int(account):
-        return JsonResponse({'error': '无权限解散该部门!'})
+    try:
+        if dept.creatornum_id != int(account):
+            error = {'error': '无权限解散该部门!'}
+            return JsonResponse(error, status=400)
+    except:
+        error = {
+            "code": 4004,
+            "message": "DB Error"
+        }
+        return JsonResponse(error, status=400)
+
     # 删除部门记录
-    dept.delete()
+    try:
+        dept.delete()
+    except:
+        error = {
+            "code": 4004,
+            "message": "DB Error"
+        }
+        return JsonResponse(error, status=400)
 
     # 查询用户绑定信息
-    shares = Share.objects.filter()
+    try:
+        shares = Share.objects.filter()
+    except:
+        error = {
+            "code": 4004,
+            "message": "DB Error"
+        }
+        return JsonResponse(error, status=400)
+
     # 将所有绑定当前部门id的记录设置为-1
-    shares.filter(BindDepartA=code).update(BindDepartA=None)
-    shares.filter(BindDepartB=code).update(BindDepartB=None)
-    shares.filter(BindDepartC=code).update(BindDepartC=None)
-    shares.filter(BindDepartD=code).update(BindDepartD=None)
-
-    # 返回成功标识
+    try:
+        shares.filter(BindDepartA=code).update(BindDepartA=None)
+        shares.filter(BindDepartB=code).update(BindDepartB=None)
+        shares.filter(BindDepartC=code).update(BindDepartC=None)
+        shares.filter(BindDepartD=code).update(BindDepartD=None)
+    except:
+        error = {
+            "code": 4004,
+            "message": "DB Error"
+        }
+        return JsonResponse(error, status=400)
     return JsonResponse({'success': True})
+
 def QuitDept(request):
-    postbody = request.body
-    json_param = json.loads(postbody.decode())
-    cont = json_param.get("cont")
-    account = json_param.get('account')
-    token = json_param.get("token")
+    # 获取请求体
+    try:
+        postbody = request.body
+        json_param = json.loads(postbody.decode())
+    except:
+        error = {
+            "code": 4004,
+            "message": "Invalid Request"
+        }
+        return JsonResponse(error, status=400)
 
-    if not auth_by_snumber(account, token):
-        error = {"code": 4000, "message": "TOKEN Error"}
-        return JsonResponse(error)
+    # 获取请求参数
+    try:
+        cont = json_param.get("cont")
+        account = json_param.get('account')
+        token = json_param.get("token")
+    except:
+        error = {
+            "code": 4004,
+            "message": "Invalid Parameters"
+        }
+        return JsonResponse(error, status=400)
 
+    # 验证token
+    try:
+        if not auth_by_snumber(account, token):
+            error = {"code": 4000, "message": "TOKEN Error"}
+            return JsonResponse(error, status=400)
+    except:
+        error = {
+            "code": 4004,
+            "message": "TOKEN Error"
+        }
+        return JsonResponse(error, status=400)
 
     # 查询用户绑定信息
-    share = Share.objects.get(Usernumber=account)
+    try:
+        share = Share.objects.get(Usernumber=account)
+    except:
+        error = {
+            "code": 4004,
+            "message": "DB Error"
+        }
+        return JsonResponse(error, status=400)
 
-    if cont == 'A':
-        share.BindDepartA = None
-    elif cont == 'B':
-        share.BindDepartB = None
-    elif cont == 'C':
-        share.BindDepartC = None
-    elif cont == 'D':
-        share.BindDepartD = None
-    # 保存更新
-    share.save()
+    # 进行解绑操作
+    try:
+        if cont == 'A':
+            share.BindDepartA = None
+        elif cont == 'B':
+            share.BindDepartB = None
+        elif cont == 'C':
+            share.BindDepartC = None
+        elif cont == 'D':
+            share.BindDepartD = None
+        share.save()
+    except:
+        error = {
+            "code": 4004,
+            "message": "DB Error"
+        }
+        return JsonResponse(error, status=400)
 
-    # 返回成功标识
     return JsonResponse({'success': True})
-def GetWeekPostState(request):
-    postbody = request.body
-    print(postbody)
-    json_param = json.loads(postbody.decode())
-    account = json_param.get('account')
-    token = json_param.get("token")
 
-    if not auth_by_snumber(account, token):
-        error = {"code": 4000, "message": "TOKEN Error"}
-        return JsonResponse(error)
+def KickDept(request):
+    # 获取请求体
+    try:
+        postbody = request.body
+        json_param = json.loads(postbody.decode())
+    except:
+        error = {
+            "code": 4004,
+            "message": "Invalid Request"
+        }
+        return JsonResponse(error, status=400)
+
+    # 获取请求参数
+    try:
+        cont = json_param.get("cont") # 被踢出的用户名称
+        code = json_param.get('code')
+        account = json_param.get('account')
+        token = json_param.get("token")
+    except:
+        error = {
+            "code": 4004,
+            "message": "Invalid Parameters"
+        }
+        return JsonResponse(error, status=400)
+
+    # 验证token
+    try:
+        if not auth_by_snumber(account, token):
+            error = {"code": 4000, "message": "TOKEN Error"}
+            return JsonResponse(error, status=400)
+    except:
+        error = {
+            "code": 4004,
+            "message": "TOKEN Error"
+        }
+        return JsonResponse(error, status=400)
+
+    # 邀请码解密获取部门id
+
+    try:
+        dept = DepartmentClass.objects.get(invitecode=code)
+    except DepartmentClass.DoesNotExist:
+        error = {"code": 4001, "message": "邀请码不存在"}
+        return JsonResponse(error, status=400)
+    except Exception as e:
+        error = {
+            "code": 4004,
+            "message": f"DB Error: {str(e)}"
+        }
+        return JsonResponse(error, status=400)
+    # 检验部门创建者是否为当前用户
+    try:
+        if dept.creatornum_id != int(account):
+            error = {'error': '无权限解散该部门!'}
+            return JsonResponse(error, status=400)
+    except Exception as e:
+        error = {
+            "code": 4004,
+            "message": f"DB Error: {str(e)}"
+        }
+        return JsonResponse(error, status=400)
+
+    # 找出dept部门里名称为cont的用户然后解绑
+    try:
+        share = Share.objects.get(Usernumber=cont)
+        if share.BindDepartA == code:
+            share.BindDepartA = None
+        elif share.BindDepartB == code:
+            share.BindDepartB = None
+        elif share.BindDepartC == code:
+            share.BindDepartC = None
+        elif share.BindDepartD == code:
+            share.BindDepartD = None
+        share.save()
+    except:
+        error = {
+            "code": 4004,
+            "message": "DB Error"
+        }
+        return JsonResponse(error, status=400)
+    return JsonResponse({'success': True})
+
+
+def GetWeekPostState(request):
+    # 获取请求体
+    try:
+        postbody = request.body
+        json_param = json.loads(postbody.decode())
+    except:
+        error = {
+            "code": 4004,
+            "message": "Invalid Request"
+        }
+        return JsonResponse(error, status=400)
+
+    # 获取请求参数
+    try:
+        account = json_param.get('account')
+        token = json_param.get("token")
+    except:
+        error = {
+            "code": 4004,
+            "message": "Invalid Parameters"
+        }
+        return JsonResponse(error, status=400)
+
+    # 验证token
+    try:
+        if not auth_by_snumber(account, token):
+            error = {"code": 4000, "message": "TOKEN Error"}
+            return JsonResponse(error, status=400)
+    except:
+        error = {
+            "code": 4004,
+            "message": "TOKEN Error"
+        }
+        return JsonResponse(error, status=400)
 
     # 获取用户信息
-    user = User.objects.get(Snumber=account)
+    try:
+        user = User.objects.get(Snumber=account)
+    except:
+        error = {
+            "code": 4004,
+            "message": "DB Error"
+        }
+        return JsonResponse(error, status=400)
+
     # 获取CourseSchedule表中该用户的所有记录
-    schedule_list = CourseSchedule.objects.filter(user=user)
+    try:
+        schedule_list = CourseSchedule.objects.filter(user=user)
+    except:
+        error = {
+            "code": 4004,
+            "message": "DB Error"
+        }
+        return JsonResponse(error, status=400)
+
     # 存储所有星期信息的列表
     week_list = []
+
     # 遍历该用户的所有课表记录
     for schedule in schedule_list:
         # 获取该条记录的星期信息
-        week_number = schedule.week_number
-        # 添加到星期列表中
+        try:
+            week_number = schedule.week_number
+        except:
+            error = {
+                "code": 4004,
+                "message": "DB Error"
+            }
+            return JsonResponse(error, status=400)
+
+            # 添加到星期列表中
         week_list.append(week_number)
-        # 获取所有可能的星期(这里定义为1-20周)
+
+    # 获取所有可能的星期(这里定义为1-20周)
     all_weeks = [i for i in range(1, 21)]
+
     # 获取还未有课表的星期
     weeks_not_exist = list(set(all_weeks).difference(set(week_list)))
+
     # 将数据返回给前端
     data = {"weeks_not_exist": weeks_not_exist}
     return JsonResponse(data)
 
+def GetShareInfo(request):
+    # 获取请求体
+    try:
+        postbody = request.body
+        json_param = json.loads(postbody.decode())
+    except:
+        error = {
+            "code": 4004,
+            "message": "Invalid Request"
+        }
+        return JsonResponse(error, status=400)
+
+    # 获取请求参数
+    try:
+        # 账号名称
+        account = json_param.get('account')
+        # token名称
+        token = json_param.get("token")
+        # 区别部门/账号
+        flag= json_param.get("flag")
+        # 部门/账号名称
+        cont= json_param.get("cont")
+        # 周次
+        week_number = json_param.get("week_number")
+        # 对方账号
+        postnum = json_param.get("postnum")
+
+    except:
+        error = {
+            "code": 4004,
+            "message": "Invalid Parameters"
+        }
+        return JsonResponse(error, status=400)
+
+    # 验证token
+    try:
+        if not auth_by_snumber(account, token):
+            error = {"code": 4000, "message": "TOKEN Error"}
+            return JsonResponse(error, status=400)
+    except:
+        error = {
+            "code": 4004,
+            "message": "TOKEN Error"
+        }
+        return JsonResponse(error, status=400)
+
+    # 查找用户是否存在
+    try:
+        Userresult = User.objects.filter(Snumber=account)
+    except:
+        error = {
+            "code": 4004,
+            "message": "DB Error"
+        }
+        return JsonResponse(error, status=400)
+    if not Userresult.exists():
+        error = {
+            "code": 4001,
+            "message": "Not User"
+        }
+        return JsonResponse(error, status=400)
+
+    # 如果flag=0，代表是账号
+    if flag == 0:
+        # 查找共享表是否存在
+        try:
+            Shareresult = Share.objects.filter(Usernumber_id=account)
+        except:
+            error = {
+                "code": 4004,
+                "message": "DB Error"
+            }
+            return JsonResponse(error, status=400)
+        if not Shareresult.exists():
+            error = {
+                "code": 4004,
+                "message": "DB Error"
+            }
+            return JsonResponse(error, status=400)
+        # 查找对方用户是否存在
+        try:
+            UserresultPost = User.objects.filter(Snumber=postnum)
+        except:
+            error = {
+                "code": 4004,
+                "message": "DB Error"
+            }
+            return JsonResponse(error, status=400)
+        if not UserresultPost.exists():
+            error = {
+                "code": 4002,
+                "message": "Not User Other"
+            }
+            return JsonResponse(error, status=400)
 
 
+        share_bind_dict = {
+            'A': ('CBindAState', 'CBindANumber'),
+            'B': ('CBindBState', 'CBindBNumber'),
+            'C': ('CBindCState', 'CBindCNumber'),
+            'D': ('CBindDState', 'CBindDNumber'),
+            'E': ('CBindEState', 'CBindENumber')
+        }
+        # 查找对方共享表中相关字段状态是否为0,若为0表示可接收共享
+        try:
+            state_field, number_field = share_bind_dict[cont]
+        except:
+            error = {
+                "code": 4001,
+                "message": "CONT ERROR"
+            }
+            error = json.dumps(error)
+            return HttpResponse(content=error, content_type='application/json', status=400)
+
+        try:
+            sharebind = Share.objects.filter(Usernumber_id=account).values(state_field)
+            sharebind = sharebind[0][state_field]
+        except:
+            error = {
+                "code": 4004,
+                "message": "Share State Error"
+            }
+            return JsonResponse(error, status=400)
+        if sharebind != 3:
+            error = {
+                "code": 4005,
+                "message": "relation error"
+            }
+            return JsonResponse(error, status=400)
+            # 查找对方共享表中相关字段状态是否为0,若为0表示可接收共享
+        try:
+            sharebind = Share.objects.filter(Usernumber_id=postnum).values(state_field)
+            sharebind = sharebind[0][state_field]
+        except:
+            error = {
+                "code": 4004,
+                "message": "Share State Error"
+            }
+            return JsonResponse(error, status=400)
+        if sharebind != 3:
+            error = {
+                "code": 4005,
+                "message": "relation error"
+            }
+            return JsonResponse(error, status=400)
+
+        # 返回user为Postman用户的CourseSchedule表的week_number周的schedule数据
+        try:
+            schedule = CourseSchedule.objects.filter(user=postnum, week_number=week_number).values()
+        except:
+            error = {
+                "code": 4004,
+                "message": "DB Erroraaa"
+            }
+            return JsonResponse(error, status=400)
+        if not schedule.exists():
+            error = {
+                "code": 4006,
+                "message": "Not Schedule"
+            }
+            return JsonResponse(error, status=400)
+        #返回schedule的schedule字段
+        schedule = schedule.values('schedule')
+        #将schedule存储的字符串转换为json格式返回
+        schedule = json.loads(schedule[0]['schedule'])
+
+        #返回http的json数据
+        return JsonResponse(schedule, safe=False, status=200)
+
+    # 如果flag=1，代表是部门
+    elif flag == 1:
+        # 查找共享表是否存在
+        try:
+            Shareresult = Share.objects.filter(Usernumber_id=account)
+        except:
+            error = {
+                "code": 4004,
+                "message": "DB Error"
+            }
+            return JsonResponse(error, status=400)
+        if not Shareresult.exists():
+            error = {
+                "code": 4004,
+                "message": "DB Error"
+            }
+            return JsonResponse(error, status=400)
+        # 查找对方用户是否存在
+        try:
+            UserresultPost = User.objects.filter(Snumber=postnum)
+        except:
+            error = {
+                "code": 4004,
+                "message": "DB Error"
+            }
+            return JsonResponse(error, status=400)
+        if not UserresultPost.exists():
+            error = {
+                "code": 4002,
+                "message": "Not User Other"
+            }
+            return JsonResponse(error, status=400)
+
+        share_bind_dict = {
+            'A': ('BindDepartA'),
+            'B': ('BindDepartB'),
+            'C': ('BindDepartC'),
+            'D': ('BindDepartD')
+        }
+        # 定位部门记号
+        try:
+            state_field = share_bind_dict[cont]
+        except:
+            error = {
+                "code": 4001,
+                "message": "CONT ERROR"
+            }
+            error = json.dumps(error)
+            return HttpResponse(content=error, content_type='application/json', status=400)
+        #查询共享表字段是否已经绑定部门
+        try:
+            depbind = Share.objects.filter(Usernumber_id=account).values(state_field)
+            depbind = depbind[0][state_field]
+        except:
+            error = {
+                "code": 4004,
+                "message": "Share State Error"
+            }
+            return JsonResponse(error, status=400)
+        if depbind == None:
+            error = {
+                "code": 4005,
+                "message": "bind error"
+            }
+            return JsonResponse(error, status=400)
+
+
+        try:
+            invite = Share.objects.filter(Usernumber_id=account).values(state_field)
+            invitecode = invite[0][state_field]
+            # 去查询Share表所有的BindDepartA,BindDepartB,BindDepartC,BindDepartD字段，将其四个字段中所有值等于invitecode返回到Usernumber的列表中
+            userlist = Share.objects.filter(
+                Q(BindDepartA=invitecode) | Q(BindDepartB=invitecode) | Q(BindDepartC=invitecode) | Q(
+                    BindDepartD=invitecode)).values('Usernumber')
+            # 将userlist中的Usernumber值取出来，放到一个列表中
+            userlist = [i['Usernumber'] for i in userlist]
+
+            #根据数组userlist里的Sname值，查询User表的Sname和Name字段，返回一个字典列表
+            userlist = User.objects.filter(Snumber__in=userlist).values('Snumber', 'Name')
+            #将userlist转换成列表
+            userlist = list(userlist)
+            print(userlist)
+
+        except:
+            error = {
+                "code": 4004,
+                "message": "DB Error-"
+            }
+            return JsonResponse(error, status=400)
+
+
+        scheduletable = [[[[] for j in range(len(userlist)+3)] for i in range(5)] for k in range(7)]  # 课程表
+        #根据列表，分别查询CourseSchedule的week数值的schedule课表数据，然后对每个课表数据进行处理，他是一个三维数组，第一维是五个数据，第二维是一天的五节课程，第三维是每周七天的天数，每个课表数据是一个字典，包含课程名，课程地点，课程周数，课程节数，课程教师，课程类型，我希望如果第一维有存在数据的将其列表的name放入到我table表中。
+        try:
+            for i in range(int(len(userlist))):
+                #schedule读取失败后返回信息
+                try:
+                    schedule = CourseSchedule.objects.filter(user=userlist[i]['Snumber'],
+                                                         week_number=week_number).values()
+                    # 将schedule转换成从字符串转json
+                    schedule = json.loads(schedule[0]['schedule'])
+                    print(schedule)
+                except:
+                    error = {
+                        "code": 4100,
+                        "message": userlist[i]['Name']+"尚未存入本周课表，请他完成课表上传功能."
+                    }
+                    return JsonResponse(error, status=400)
+
+                for j in range(7):
+                    for k in range(5):
+                        if schedule[j][k][0]:
+                            scheduletable[j][k][i] = userlist[i]['Name']
+        except:
+            error = {
+                "code": 4004,
+                "message": "DB Error"
+            }
+            return JsonResponse(error, status=400)
+        # 将scheduletable转换为json格式，返回数据
+        scheduletable = json.dumps(scheduletable)
+        return HttpResponse(content=scheduletable, content_type='application/json', status=200)
+
+
+#小科通讯录
 def GetPhonebookInfo(request):
     # 获取POST请求的body数据
     post_body = request.body
@@ -1155,7 +1702,7 @@ def GetPhonebookInfo(request):
         }
         error = json.dumps(error)
         print(error)
-        return HttpResponse(content=error, content_type='application/json')
+        return HttpResponse(content=error, content_type='application/json',status=400)
 
     # 从数据库中获取包含like名称的LikesInfo对象
     course_lib = LikesInfo.objects.filter(Groupname__icontains=like_name)
@@ -1196,7 +1743,7 @@ def GetPhonebookInfo(request):
     #         }
     #         error = json.dumps(error)
     #         print(error)
-    #         return HttpResponse(content=error, content_type='application/json')
+    #         return HttpResponse(content=error, content_type='application/json',status=400)
     #     Course_lib = serializers.serialize("json", LikesInfo.objects.filter(Groupname__icontains=_likename))
     #     print(Course_lib)
     #     print("-----")
@@ -1236,7 +1783,7 @@ def GetCourselib(request):
             }
             error = json.dumps(error)
             print(error)
-            return HttpResponse(content=error, content_type='application/json')
+            return HttpResponse(content=error, content_type='application/json',status=400)
 
     # 处理 "cont" 字段
     cont = json_param.get("cont")
@@ -1321,6 +1868,7 @@ def GetCourselib(request):
         return HttpResponse(content=json.dumps(timetable, ensure_ascii=False, indent=2),
                             content_type='application/json')
 
+
     # >> > coursedetil = course.coursetime_set.all().values_list('CourseWeek', 'CourseTime')
     # >>  coursedet>il
     # < QuerySet[('2-9', '20304')] >
@@ -1331,7 +1879,6 @@ def GetCourselib(request):
     # elif _cont==1:
     #
     #     return HttpResponse(content=req, content_type='application/json')
-
 
 #废弃区
 def LogininfoQZ(request):
@@ -1388,6 +1935,7 @@ def LogininfoQZ(request):
         "token": session_token
     }
     return HttpResponse(content=json.dumps(response_data), content_type='application/json')
+
 def ClassInfoQZ(request):
     global url,HEADERS
     # 获取请求体中的参数
@@ -1525,7 +2073,6 @@ def ClassInfoQZ(request):
         # 添加异常处理机制
         return HttpResponse(content=f"An error occurred: {e}", status=500)
 
-
 def StudentInfoQZ(request):
     # 解析请求体
     if request.method != 'POST':
@@ -1534,7 +2081,7 @@ def StudentInfoQZ(request):
             "message": "Invalid request method"
         }
         error = json.dumps(error)
-        return HttpResponse(content=error, content_type='application/json')
+        return HttpResponse(content=error, content_type='application/json',status=400)
 
     try:
         json_param = json.loads(request.body.decode())
@@ -1548,7 +2095,7 @@ def StudentInfoQZ(request):
             "message": "Invalid request body"
         }
         error = json.dumps(error)
-        return HttpResponse(content=error, content_type='application/json')
+        return HttpResponse(content=error, content_type='application/json',status=400)
 
 
 
@@ -1571,7 +2118,7 @@ def StudentInfoQZ(request):
             "message": "Session Error"
         }
         error = json.dumps(error)
-        return HttpResponse(content=error, content_type='application/json')
+        return HttpResponse(content=error, content_type='application/json',status=400)
 
     data = json.loads(req.text)
     if data.get('token') == '-1':
@@ -1580,14 +2127,14 @@ def StudentInfoQZ(request):
             "message": "Token=-1"
         }
         error = json.dumps(error)
-        return HttpResponse(content=error, content_type='application/json')
+        return HttpResponse(content=error, content_type='application/json',status=400)
     elif req.status_code != 200:
         error = {
             "code": 4004,
             "message": "Bad Request"
         }
         error = json.dumps(error)
-        return HttpResponse(content=error, content_type='application/json')
+        return HttpResponse(content=error, content_type='application/json',status=400)
 
     print(req.text)
     # 更新用户信息
@@ -1621,7 +2168,7 @@ def StudentInfoQZ(request):
             "message": "Bad Request"
         }
         error = json.dumps(error)
-        return HttpResponse(content=error, content_type='application/json')
+        return HttpResponse(content=error, content_type='application/json',status=400)
 
 def CurrentTimeQZ(request):
     """
@@ -1906,7 +2453,7 @@ def ExamInfo(request):
 #             }
 #             error = json.dumps(error)
 #             print(error)
-#             return HttpResponse(content=error, content_type='application/json')
+#             return HttpResponse(content=error, content_type='application/json',status=400)
 #         # 正式请求，请求课程数据，要求给课程ID；然后我给出详细的数据，包括课程名称，教室，老师名字，课程时间；
 #         _id = json_param.get("id")
 #         try:
@@ -1918,7 +2465,7 @@ def ExamInfo(request):
 #             }
 #             error = json.dumps(error)
 #             print(error)
-#             return HttpResponse(content=error, content_type='application/json')
+#             return HttpResponse(content=error, content_type='application/json',status=400)
 #         print(Course_id)
 #         Course_detail = Course_id.coursetime_set.all().values_list('CourseWeek', 'CourseTime',"CoursePlace")
 #         print(len(Course_detail))

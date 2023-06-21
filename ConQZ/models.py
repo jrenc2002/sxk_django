@@ -17,7 +17,7 @@ class User(models.Model):
     deleted = models.DateTimeField(blank=True, null=True)
 
 class Share(models.Model):
-    Usernumber = models.OneToOneField(User,verbose_name='学号',on_delete=models.PROTECT, primary_key=True)
+    Usernumber = models.OneToOneField(User,verbose_name='学号',on_delete=models.PROTECT, primary_key=True,unique=True)
     CBindAState=models.IntegerField('A课程绑定状态',default=0,blank=True,null=True)
     CBindANumber=models.BigIntegerField('A课程绑定学号',default=-1,blank=True,null=True)
     CBindBState = models.IntegerField('B课程绑定状态', default=0, blank=True, null=True)
@@ -39,7 +39,7 @@ class Share(models.Model):
 class DepartmentClass(models.Model):
     # 部门ID
     id = models.AutoField(primary_key=True)
-    creatornum = models.ForeignKey('User', on_delete=models.CASCADE)
+    creatornum = models.ForeignKey('User', on_delete=models.CASCADE, verbose_name='创建者学号')
     invitecode = models.CharField(max_length=20, unique=True,blank=True, null=True)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)

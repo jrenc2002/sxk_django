@@ -10,7 +10,6 @@ urlpatterns = [
     path('login-info/', views.Logininfo, name='login-info'),
     # 课程信息
     path('class-info/', views.PostClassInfo, name='class-info'),
-
     # 分享状态信息
     path('share-state/', views.GetShareState, name='share-state'),
     # 分享信息发布
@@ -23,9 +22,8 @@ urlpatterns = [
     path('share-dept/join/', views.JoinDept, name='join_dept'),
     path('share-dept/quit/', views.QuitDept, name='quit_dept'),
     path('share-dept/dis/', views.DismissDept, name='dismiss_dept'),
+    path('share-dept/kick/', views.KickDept, name='kick_dept'),
     path('share-week/state/', views.GetWeekPostState, name='get_week_post_state'),
-
-
     # 电话簿信息
     path('phonebook-info/', views.GetPhonebookInfo, name='phonebook-info'),
     # 课程库信息
