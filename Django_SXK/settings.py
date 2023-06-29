@@ -123,6 +123,8 @@ USE_TZ = True
 # http://192.168.21.128:8000/static/icon/home_before.png
 # http://192.168.21.128:8000/static/ScheduleContents/LineFrame.png
 STATIC_URL = '/static/'
+
+
 STATICFILES_DIRS=(os.path.join(BASE_DIR,'static'),)
 
 # Default primary key field type
