@@ -154,7 +154,7 @@ def PostClassInfo(request):
     try:
         postbody = request.body
         json_param = json.loads(postbody.decode())
-        table_ord = json_param.get('table_ord')
+        table_ord = json_param.get('table_ord', [])  # 如果'table_ord'不存在，返回空数组
         week=json_param.get('week')
         token = json_param.get("token")
         snumber=json_param.get("snumber")
@@ -162,7 +162,7 @@ def PostClassInfo(request):
         # 处理请求体中参数解析错误的情况
         error = {"code": 4000, "message": "Invalid Parameters"}
         return JsonResponse(error)
-
+    print('table_ord:', table_ord)
 
     if not auth_by_snumber(snumber,token):
         error = {"code": 4000, "message": "TOKEN Error"}
@@ -186,6 +186,12 @@ def PostClassInfo(request):
     table = [[[[] for j in range(5)] for i in range(5)] for k in range(7)]#课程
     flag_i_color = 0  # 进行表的比对，如果same表存在就直接用颜色，不存在就给个新颜色，新颜色用到的
     for newtable in table_ord:
+        if newtable is None:
+            continue  # 如果这个元素是None，那么我们直接跳过这个元素，处理下一个元素
+        # 我们还可以检查这个元素是否具有我们需要的所有属性
+        if not all(key in newtable for key in ['kcmc', 'jsmc', 'jsxm', 'kkzc', 'kcsj']):
+            continue  # 如果这个元素缺少某个属性，那么我们直接跳过这个元素，处理下一个元素
+        # 之后是你原来的代码...
         try:
             # 解析课程信息
             get_kcmc = newtable.get("kcmc")  # 课程名称
