@@ -15,6 +15,8 @@ class User(models.Model):
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
     deleted = models.DateTimeField(blank=True, null=True)
+    # 自定义模型管理类，作用：告诉django在生成的管理页面上显示哪些内容。
+
 
 class Share(models.Model):
     Usernumber = models.OneToOneField(User,verbose_name='学号',on_delete=models.PROTECT, primary_key=True,unique=True)
@@ -63,6 +65,8 @@ class Course(models.Model):
    created = models.DateTimeField(auto_now_add=True)
    updated = models.DateTimeField(auto_now=True)
    deleted = models.DateTimeField(blank=True, null=True)
+   class Meta:
+       unique_together = ('CourseName', 'CourseTeacher',)
 class CourseSchedule(models.Model):
     user = models.ForeignKey(User,verbose_name='学号', on_delete=models.CASCADE)
     week_number = models.IntegerField(verbose_name='星期')

@@ -3,6 +3,8 @@ from django.urls import path, include
 
 from ConQZ import views
 
+# from Django_SXK.ConQZ import admin
+
 app_name = 'qz'
 
 urlpatterns = [

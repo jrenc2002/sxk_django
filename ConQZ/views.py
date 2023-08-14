@@ -6,6 +6,7 @@ from random import choices, random
 
 from django.contrib.sites import requests
 from django.core import serializers
+from django.core.exceptions import ObjectDoesNotExist
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
@@ -167,6 +168,9 @@ def PostClassInfo(request):
     if not auth_by_snumber(snumber,token):
         error = {"code": 4000, "message": "TOKEN Error"}
         return JsonResponse(error)
+
+    # 用于跟踪在一个请求中已经创建的课程
+    created_courses = {}
     # 将爬取到的数据转成前端需要的数据，格式转换
     tablesame = [[-1 for j in range(2)] for k in range(35)]
     # color随机选择颜色
@@ -199,6 +203,10 @@ def PostClassInfo(request):
             get_jsxm = newtable.get("jsxm")  # 老师名称
             get_kkzc = newtable.get("kkzc")  # 上课星期
             get_kcsj = newtable.get("kcsj")  # 上课时间
+
+            # 将课程名称和教师名称组合成一个唯一键
+            course_key = (get_kcmc, get_jsxm)
+
             # 将课程信息存入表格
             kcsj_day = int(get_kcsj[0]) - 1
             cout = int(get_kcsj[3] + get_kcsj[4])
@@ -210,31 +218,20 @@ def PostClassInfo(request):
             # 老师名称
             table[kcsj_day][cout][2] = get_jsxm
 
-            Courseresult = Course.objects.filter(CourseName=get_kcmc, CourseTeacher=get_jsxm)
-            # 所有东西都存储说明我存储了课，这样不会有重复的课
-            # 我没有存储这个课
-            if not Courseresult.exists():
-                NewCourse = Course.objects.create(CourseName=get_kcmc, CourseTeacher=get_jsxm)
-                NewCourse.save()
-                NewCourseTime = CourseTime.objects.create(CourseTime=get_kcsj, CourseWeek=get_kkzc, CourseId=NewCourse,
-                                                          CoursePlace=get_jsmc)
-                NewCourseTime.save()
-            # 我已经存储这个课
+            # 检查是否已经在这个请求中创建了这个课程
+            if course_key not in created_courses:
+                Courseresult = Course.objects.filter(CourseName=get_kcmc, CourseTeacher=get_jsxm)
+                # 我没有存储这个课
+                if not Courseresult.exists():
+                    NewCourse = Course.objects.create(CourseName=get_kcmc, CourseTeacher=get_jsxm)
+                    NewCourse.save()
+                    created_courses[course_key] = NewCourse  # 将新创建的课程添加到字典中
+                # 我已经存储这个课
+                else:
+                    Course_result = Course.objects.get(CourseName=get_kcmc, CourseTeacher=get_jsxm)
+                    created_courses[course_key] = Course_result  # 将已经存在的课程添加到字典中
             else:
-                # 现在看看有没有存储这个课的时间
-                Course_result = Course.objects.get(CourseName=get_kcmc, CourseTeacher=get_jsxm)
-                CourseTimeresult = Course_result.coursetime_set.all().values_list('CourseTime')
-                flag_time = True  # 没有相等的
-                for time_i in CourseTimeresult:
-                    if time_i[0] == get_kcsj:
-                        flag_time = False  # 存在相等的
-                        break
-                # 不存在相等的时间，我要不要记录星期有没有时间相同星期不同？除非后期调课，原来的课调走后面的课然后调到相同时间这时会漏读多读。
-                if flag_time == True:
-                    NewCourseTime = CourseTime.objects.create(CourseTime=get_kcsj, CourseWeek=get_kkzc,
-                                                              CourseId=Course_result,
-                                                              CoursePlace=get_jsmc)
-                    NewCourseTime.save()
+                Course_result = created_courses[course_key]
 
             # 给颜色
             for tablesame_i in tablesame:
@@ -876,19 +873,26 @@ def GetShareState(request):
             }
             return JsonResponse(error, status=400)
 
+
     # 序列化共享表数据
     try:
         data = serializers.serialize("json", Share.objects.filter(Usernumber_id=_account))
         data_json = json.loads(data)
-        data_json = json.dumps(data_json[0]['fields'])
-    except Exception as e:
-        error = {
-            "code": 4004,
-            "message": f"DB Error: {str(e)}"
-        }
-        return JsonResponse(error, status=400)
+        data_json = data_json[0].get('fields')
 
-    return HttpResponse(content=data_json, content_type='application/json')
+        # 获取部门名称
+        for dep in ['A', 'B', 'C', 'D']:
+            dep_id = data_json.get(f'BindDepart{dep}')
+            if  dep_id != 'None':
+                try:
+                    dep_name = DepartmentClass.objects.get(invitecode=dep_id).departName
+                    data_json[f'DepartName{dep}'] = dep_name
+                except ObjectDoesNotExist:
+                    data_json[f'DepartName{dep}'] = None
+    except Exception as e:
+        return JsonResponse({"code": 4004, "message": f"DB Error: {str(e)}"}, status=400)
+
+    return HttpResponse(content=json.dumps(data_json), content_type='application/json')
 
 def GetShareInfo(request):
     # 获取请求体
@@ -1652,7 +1656,7 @@ def GetDeptInfo(request):
         return JsonResponse(error, status=400)
 
 
-    scheduletable = [[[[[],[]] for j in range(len(userlist)+3)] for i in range(5)] for k in range(7)]  # 课程表
+    scheduletable = [[[[[],[]] for j in range(len(userlist)+1)] for i in range(5)] for k in range(7)]  # 课程表
     #根据列表，分别查询CourseSchedule的week数值的schedule课表数据，然后对每个课表数据进行处理，他是一个三维数组，第一维是五个数据，第二维是一天的五节课程，第三维是每周七天的天数，每个课表数据是一个字典，包含课程名，课程地点，课程周数，课程节数，课程教师，课程类型，我希望如果第一维有存在数据的将其列表的name放入到我table表中。
     try:
         for i in range(int(len(userlist))):
@@ -1768,7 +1772,7 @@ def GetWeekPostState(request):
     data = {"weeks_not_exist": weeks_not_exist}
     return JsonResponse(data)
 
-# 返回所有部门的成员信息
+# 鹿诚龙
 def GetDepartmentMemberInfo(request):
     # 获取请求体
     try:
@@ -1899,7 +1903,6 @@ def GetDepartmentMemberInfo(request):
         return JsonResponse(error, status=400)
     # 返回用户表
     return HttpResponse(content=json.dumps(userlist), content_type='application/json', status=200)
-
 
 
 
