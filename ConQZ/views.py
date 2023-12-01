@@ -18,7 +18,7 @@ from django.core.cache import cache
 from hashlib import md5
 import jwt
 
-from ConQZ.models import User,DepartmentClass,Share,LikesInfo,Course,CourseTime,CourseSchedule
+from ConQZ.models import User,DepartmentClass,Share,LikesInfo,Course,CourseTime,CourseSchedule,FoodLocation,Food,Static
 from requests import RequestException
 
 
@@ -150,6 +150,9 @@ def Logininfo(request):
         return JsonResponse({'status': 'error', 'message': '仅支持 POST 请求'})
 
 # 提交课程记录
+
+#共享课表路由
+
 def PostClassInfo(request):
     # 获取请求体中的参数
     try:
@@ -218,20 +221,37 @@ def PostClassInfo(request):
             # 老师名称
             table[kcsj_day][cout][2] = get_jsxm
 
+
             # 检查是否已经在这个请求中创建了这个课程
             if course_key not in created_courses:
                 Courseresult = Course.objects.filter(CourseName=get_kcmc, CourseTeacher=get_jsxm)
                 # 我没有存储这个课
                 if not Courseresult.exists():
-                    NewCourse = Course.objects.create(CourseName=get_kcmc, CourseTeacher=get_jsxm)
-                    NewCourse.save()
-                    created_courses[course_key] = NewCourse  # 将新创建的课程添加到字典中
+                    Course_result = Course.objects.create(CourseName=get_kcmc, CourseTeacher=get_jsxm)
+                    Course_result.save()
+                    created_courses[course_key] = Course_result
                 # 我已经存储这个课
                 else:
                     Course_result = Course.objects.get(CourseName=get_kcmc, CourseTeacher=get_jsxm)
                     created_courses[course_key] = Course_result  # 将已经存在的课程添加到字典中
             else:
                 Course_result = created_courses[course_key]
+
+            # 检查并存储课程时间
+            try:
+                # 使用 get_or_create 来避免重复创建相同的课程
+
+                course_time, created = CourseTime.objects.get_or_create(
+                    CourseId=Course_result,
+                    CourseTime=get_kcsj,
+                    CourseWeek=get_kkzc,
+                    CoursePlace=get_jsmc
+                )
+                if created:
+                    course_time.save()
+            except Exception as e:
+                # 添加异常处理机制
+                continue  # 发生异常时跳过当前迭代
 
             # 给颜色
             for tablesame_i in tablesame:
@@ -248,7 +268,7 @@ def PostClassInfo(request):
                     break
         except Exception as e:
             # 添加异常处理机制
-            return HttpResponse(content=f"An error occurred: {e}", status=500)
+            continue
     # 将表格转换成 JSON 格式并返回
     try:
         str_json = json.dumps(table, ensure_ascii=False, indent=2)
@@ -275,10 +295,10 @@ def PostClassInfo(request):
                                                week_number=week,
                                                schedule=str_json)
         schedule.save()
+
+
+
     return JsonResponse({'status': 'success'})
-
-#共享课表路由
-
 def ReplyShareState(request):
     # 获取请求体
     postbody = request.body
@@ -1772,7 +1792,6 @@ def GetWeekPostState(request):
     data = {"weeks_not_exist": weeks_not_exist}
     return JsonResponse(data)
 
-# 鹿诚龙
 def GetDepartmentMemberInfo(request):
     # 获取请求体
     try:
@@ -1908,14 +1927,21 @@ def GetDepartmentMemberInfo(request):
 
 
 
-#小科通讯录
-def GetPhonebookInfo(request):
-    # 获取POST请求的body数据
-    post_body = request.body
-    print(post_body)
+#Project 小科通讯录
+#Task 同好群查询
+def GetLikesInfo(request):
 
-    # 解析JSON参数
-    json_param = json.loads(post_body.decode())
+    # 获取请求体
+    try:
+        postbody = request.body
+        json_param = json.loads(postbody.decode())
+    except:
+        error = {
+            "code": 4004,
+            "message": "Invalid Request"
+        }
+        return JsonResponse(error, status=400)
+
 
     # 序列化数据库中所有的LikesInfo对象，并将结果赋值给content变量
     content = serializers.serialize("json", LikesInfo.objects.all())
@@ -1965,41 +1991,71 @@ def GetPhonebookInfo(request):
     # 将course_lib_top_5序列化为JSON对象，并将其返回
     course_lib_top_5_json = json.dumps(course_lib_top_5)
     return HttpResponse(content=course_lib_top_5_json, content_type='application/json')
-    #  _page = json_param.get("page")
-    #     _likename = json_param.get('likename')
-    #     if _likename==None or _page==None:
-    #         error = {
-    #             "code": 4009,
-    #             "message": "Begin Data Error"
-    #         }
-    #         error = json.dumps(error)
-    #         print(error)
-    #         return HttpResponse(content=error, content_type='application/json',status=400)
-    #     Course_lib = serializers.serialize("json", LikesInfo.objects.filter(Groupname__icontains=_likename))
-    #     print(Course_lib)
-    #     print("-----")
-    #     Course_lib = json.loads(Course_lib)
-    #     Course_lib_list = [[] for k in range(5)]
-    #     for index in range((_page - 1) * 5, (_page) * 5):
-    #         if len(Course_lib) > index:
-    #             print(index)
-    #             Course_lib_list[index - (_page - 1) * 5] = Course_lib[index]['fields']
-    #             Course_lib_list[index-(_page-1)*5]["id"]=Course_lib[index]['pk']
-    #             print(Course_lib_list[index - (_page - 1) * 5])
-    #             print("-----------")
-    #     Course_lib_json = json.dumps(Course_lib_list)
-    #     print(Course_lib_json)
-    #     print(type(Course_lib_json))
-    #     return HttpResponse(content=Course_lib_json, content_type='application/json')
-    #
-    #     return HttpResponse(content=content, content_type='application/json'
- #小科食物库
+
+#Task 科创群查询
+def GetSciencesInfo(request):
+    # 获取POST请求的body数据
+    post_body = request.body
+    print(post_body)
+
+    # 解析JSON参数
+    json_param = json.loads(post_body.decode())
+
+    # 序列化数据库中所有的LikesInfo对象，并将结果赋值给content变量
+    content = serializers.serialize("json", LikesInfo.objects.all())
+    print(content)
+    print(type(content))
+
+    # 检查并获取分页参数和like名称参数
+    page = json_param.get("page")
+    like_name = json_param.get('likename')
+    if like_name is None or page is None:
+        # 如果缺少参数，则返回错误响应
+        error = {
+            "code": 4009,
+            "message": "Begin Data Error"
+        }
+        error = json.dumps(error)
+        print(error)
+        return HttpResponse(content=error, content_type='application/json', status=400)
+
+    # 从数据库中获取包含like名称的LikesInfo对象
+    course_lib = LikesInfo.objects.filter(Groupname__icontains=like_name)
+
+    # 将course_lib序列化为JSON对象，然后再反序列化为Python对象
+    course_lib_json = serializers.serialize('json', course_lib)
+    course_lib_list = json.loads(course_lib_json)
+
+    # 创建一个空列表来保存Course_lib_list的前5项
+    course_lib_top_5 = []
+
+    # 计算第一个需要返回的项的索引
+    start_index = (page - 1) * 5
+
+    # 计算最后一个需要返回的项的索引
+    end_index = page * 5
+
+    # 如果end_index超出了Course_lib_list的长度，则将其设置为Course_lib_list的长度
+    if end_index > len(course_lib_list):
+        end_index = len(course_lib_list)
+
+    # 遍历Course_lib_list中的项，将前5项添加到course_lib_top_5中
+    for index in range(start_index, end_index):
+        # 将当前项添加到course_lib_top_5中
+        current_item = course_lib_list[index]['fields']
+        current_item['id'] = course_lib_list[index]['pk']
+        course_lib_top_5.append(current_item)
+
+    # 将course_lib_top_5序列化为JSON对象，并将其返回
+    course_lib_top_5_json = json.dumps(course_lib_top_5)
+    return HttpResponse(content=course_lib_top_5_json, content_type='application/json')
+
 
 #小科备忘录
 
 #小科经验包
 
-#教室课表
+#Project 教室课表
 def GetCRoomlib(request):
 
     postbody = request.body
@@ -2114,553 +2170,132 @@ def GetLibdetail(request):
     return HttpResponse(content=json.dumps(timetable, ensure_ascii=False, indent=2),
                         content_type='application/json')
 
-    # >> > coursedetil = course.coursetime_set.all().values_list('CourseWeek', 'CourseTime')
-    # >>  coursedet>il
-    # < QuerySet[('2-9', '20304')] >
-    # >> > coursedetil[0]
-    # ('2-9', '20304')
 
-    # 节流查询数据
-    # elif _cont==1:
-    #
-    #     return HttpResponse(content=req, content_type='application/json')
+#Project 小科食物库
+def GetFoodKind(request):
+    # 获取请求体
+    try:
+        postbody = request.body
+        json_param = json.loads(postbody.decode())
+    except:
+        error = {
+            "code": 4004,
+            "message": "Invalid Request"
+        }
+        return JsonResponse(error, status=400)
 
-#废弃区
-# def LogininfoQZ(request):
-#     # 检验POST
-#     if request.method != 'POST':
-#         error = {
-#             "code": 4000,
-#             "message": "Invalid Request Method"
-#         }
-#         return HttpResponse(content=json.dumps(error), content_type='application/json', status=400)
-#     # 读取POST请求的数据
-#     try:
-#         post_data = json.loads(request.body.decode())
-#     except json.JSONDecodeError:
-#         error = {
-#             "code": 4001,
-#             "message": "Invalid Request Body"
-#         }
-#         return HttpResponse(content=json.dumps(error), content_type='application/json', status=400)
-#     account = post_data.get('account')
-#     password = post_data.get('password')
-#     if not all([account, password]):
-#         error = {
-#             "code": 4002,
-#             "message": "Missing Account or Password"
-#         }
-#         return HttpResponse(content=json.dumps(error), content_type='application/json', status=400)
-#
-#     #构造请求参数
-#     params = {
-#         "method": "authUser",
-#         "xh": account,
-#         "pwd": password
-#     }
-#     global HEADERS, url
-#     session = requests.Session()
-#     try:
-#         req = session.get(url, params=params, timeout=5, headers=HEADERS)
-#         s = req.json()
-#     except requests.exceptions.RequestException:
-#         # 如果请求出错，返回4001错误
-#         error = {"code": 4001, "message": "Session Error"}
-#         return JsonResponse(error, status=400)
-#     # 检查是否登录成功
-#     if s.get("flag") != "1":
-#         # 如果登录不成功，返回400错误
-#         error = {"code": 4000, "message": "Invalid Login"}
-#         return JsonResponse(error, status=400)
-#     # 保存cookie
-#     session_token = s.get("token")
-#     print(session_token)
-#     # 返回cookie和token
-#     response_data = {
-#         "token": session_token
-#     }
-#     return HttpResponse(content=json.dumps(response_data), content_type='application/json')
-#
-# def ClassInfoQZ(request):
-#     global url,HEADERS
-#     # 获取请求体中的参数
-#     try:
-#         postbody = request.body
-#         json_param = json.loads(postbody.decode())
-#         _account = json_param.get('account')
-#         _password = json_param.get('password')
-#         zc = json_param.get("cont", -1)
-#         token = json_param.get("token")
-#         HEADERS["token"] = token
-#     except Exception as e:
-#         # 处理请求体中参数解析错误的情况
-#         error = {"code": 4000, "message": "Invalid Parameters"}
-#         return JsonResponse(error)
-#     # 建立一个 requests session 并设置 cookies
-#     session = requests.Session()
-#
-#     # 请求接口，获取当前学期和周次信息
-#     params = {"method": "getCurrentTime", "currDate": datetime.datetime.now().strftime("%Y-%m-%d")}
-#     try:
-#         req = session.get(url, params=params, timeout=15, headers=HEADERS)
-#         s = json.loads(req.text)
-#         # 处理获取周次信息失败的情况
-#         if s.get("zc") is None:
-#             error = {"code": 4006, "message": "QZ Error"}
-#             return JsonResponse(error)
-#     except Exception as e:
-#         print("请求错误：", e)  # 输出异常信息
-#         # 处理 session 对话错误的情况
-#         error = {"code": 4001, "message": "Session Error"}
-#         return JsonResponse(error)
-#
-#     # 获取到当前学期和周次信息后，请求获取课表数据接口
-#     params = {"method": "getKbcxAzc", "xnxqid": s["xnxqh"], "zc": s["zc"] if zc == -1 else zc, "xh": _account}
-#     try:
-#         req = session.get(url, params=params, timeout=15, headers=HEADERS)
-#         table_ord = json.loads(req.text)
-#         print(req.text)
-#         # 处理获取课表数据失败的情况
-#         if table_ord[0] is None:
-#             return JsonResponse([])
-#     except Exception as e:
-#         # 处理获取课表数据错误的情况
-#         print("请求错误：", e)  # 输出异常信息
-#         error = {"code": 4001, "message": "Session Error"}
-#         return JsonResponse(error)
-#
-#
-#
-#     # 将爬取到的数据转成前端需要的数据，格式转换
-#     tablesame = [[-1 for j in range(2)] for k in range(35)]
-#     # color随机选择颜色
-#     tablecolor = ["#ebb5cc", "#b2c196", "#edd492", "#fee5a3"
-#         , "#e9daa3", "#ea7375", "#a286ea", "#776fdf", "#7bc6e6"
-#         , "#efb293"]
-#     # # color随机选择莫兰迪色
-#     # tablecolor = ["#849B91", "#B4746B", "#99857E", "#91A0A5"
-#     #     , "#A79A89", "#8A95A9", "#9AA690", "#B4746B", "#AB545A"
-#     #     , "#B77F70", "#9FABB9", "#B57C82", "#686789"]
-#     # color随机选择apple超级亮色
-#     # tablecolor = ["#FF6961", "#FFB340", "#FFD426", "#30DB5B", "#70D7FF"
-#     #     , "#409CFF", "#707AFF", "#DA8FFF", "#FF6482"]
-#     # tablecolor = ["#D70015", "#C93400", "#B25000", "#248A3D", "#0071A4"
-#     #     , "#0040DD", "#3634A3", "#8944AB", "#D30F45"]
-#     # 分割将class转换成数组返回
-#     table = [[[[] for j in range(5)] for i in range(5)] for k in range(7)]#课程
-#     flag_i_color = 0  # 进行表的比对，如果same表存在就直接用颜色，不存在就给个新颜色，新颜色用到的
-#     for newtable in table_ord:
-#         try:
-#             # 解析课程信息
-#             get_kcmc = newtable.get("kcmc")  # 课程名称
-#             get_jsmc = newtable.get("jsmc")  # 上课教室
-#             get_jsxm = newtable.get("jsxm")  # 老师名称
-#             get_kkzc = newtable.get("kkzc")  # 上课星期
-#             get_kcsj = newtable.get("kcsj")  # 上课时间
-#             # 将课程信息存入表格
-#             kcsj_day = int(get_kcsj[0]) - 1
-#             cout = int(get_kcsj[3] + get_kcsj[4])
-#             cout = int(cout / 2) - 1
-#             # 课程名称
-#             table[kcsj_day][cout][0] = get_kcmc
-#             # 上课地址
-#             table[kcsj_day][cout][1] = get_jsmc
-#             # 老师名称
-#             table[kcsj_day][cout][2] = get_jsxm
-#
-#             Courseresult = Course.objects.filter(CourseName=get_kcmc, CourseTeacher=get_jsxm)
-#             # 所有东西都存储说明我存储了课，这样不会有重复的课
-#             # 我没有存储这个课
-#             if not Courseresult.exists():
-#                 NewCourse = Course.objects.create(CourseName=get_kcmc, CourseTeacher=get_jsxm)
-#                 NewCourse.save()
-#                 NewCourseTime = CourseTime.objects.create(CourseTime=get_kcsj, CourseWeek=get_kkzc, CourseId=NewCourse,
-#                                                           CoursePlace=get_jsmc)
-#                 NewCourseTime.save()
-#             # 我已经存储这个课
-#             else:
-#                 # 现在看看有没有存储这个课的时间
-#                 Course_result = Course.objects.get(CourseName=get_kcmc, CourseTeacher=get_jsxm)
-#                 CourseTimeresult = Course_result.coursetime_set.all().values_list('CourseTime')
-#                 flag_time = True  # 没有相等的
-#                 for time_i in CourseTimeresult:
-#                     if time_i[0] == get_kcsj:
-#                         flag_time = False  # 存在相等的
-#                         break
-#                 # 不存在相等的时间，我要不要记录星期有没有时间相同星期不同？除非后期调课，原来的课调走后面的课然后调到相同时间这时会漏读多读。
-#                 if flag_time == True:
-#                     NewCourseTime = CourseTime.objects.create(CourseTime=get_kcsj, CourseWeek=get_kkzc,
-#                                                               CourseId=Course_result,
-#                                                               CoursePlace=get_jsmc)
-#                     NewCourseTime.save()
-#
-#             # 给颜色
-#             for tablesame_i in tablesame:
-#                 if tablesame_i[0] == get_kcmc:
-#                     table[kcsj_day][cout][3] = tablesame_i[1]
-#                     break
-#                 if tablesame_i[0] == -1:
-#                     tablesame_i[0] = get_kcmc
-#                     tablesame_i[1] = tablecolor[flag_i_color]
-#                     flag_i_color += 1
-#                     if flag_i_color>5:
-#                         flag_i_color = flag_i_color % 7
-#                     table[kcsj_day][cout][3] = tablesame_i[1]
-#                     break
-#         except Exception as e:
-#             # 添加异常处理机制
-#             return HttpResponse(content=f"An error occurred: {e}", status=500)
-#     # 将表格转换成 JSON 格式并返回
-#     try:
-#         str_json = json.dumps(table, ensure_ascii=False, indent=2)
-#         return HttpResponse(content=str_json, content_type='application/json')
-#     except Exception as e:
-#         # 添加异常处理机制
-#         return HttpResponse(content=f"An error occurred: {e}", status=500)
-#
-# def StudentInfoQZ(request):
-#     # 解析请求体
-#     if request.method != 'POST':
-#         error = {
-#             "code": 4003,
-#             "message": "Invalid request method"
-#         }
-#         error = json.dumps(error)
-#         return HttpResponse(content=error, content_type='application/json',status=400)
-#
-#     try:
-#         json_param = json.loads(request.body.decode())
-#         _account = json_param.get('account')
-#         _password = json_param.get('password')
-#         token=json_param.get("token")
-#         HEADERS["token"] = token
-#     except json.decoder.JSONDecodeError:
-#         error = {
-#             "code": 4000,
-#             "message": "Invalid request body"
-#         }
-#         error = json.dumps(error)
-#         return HttpResponse(content=error, content_type='application/json',status=400)
-#
-#
-#
-#     session = requests.Session()
-#
-#     params = {
-#         "method": "getUserInfo",
-#         "xh": _account
-#     }
-#
-#
-#     HEADERS["token"] = token
-#     print(HEADERS)
-#
-#     try:
-#         req = session.get(url, params=params, timeout=5, headers=HEADERS)
-#     except:
-#         error = {
-#             "code": 4001,
-#             "message": "Session Error"
-#         }
-#         error = json.dumps(error)
-#         return HttpResponse(content=error, content_type='application/json',status=400)
-#
-#     data = json.loads(req.text)
-#     if data.get('token') == '-1':
-#         error = {
-#             "code": 4009,
-#             "message": "Token=-1"
-#         }
-#         error = json.dumps(error)
-#         return HttpResponse(content=error, content_type='application/json',status=400)
-#     elif req.status_code != 200:
-#         error = {
-#             "code": 4004,
-#             "message": "Bad Request"
-#         }
-#         error = json.dumps(error)
-#         return HttpResponse(content=error, content_type='application/json',status=400)
-#
-#     print(req.text)
-#     # 更新用户信息
-#     try:
-#         user_obj = User.objects.get(Snumber=_account)
-#     except User.DoesNotExist:
-#        user_obj = User.objects.create(Snumber=int(data.get('xh', '')), Name=data.get('xm', ''), PasswordQZ=_password,
-#                                            Classname=data.get('bj', ''), Majorname=data.get('zymc', ''), Collegename=data.get('yxmc', ''),
-#                                            Enteryear=int(data.get('rxnf', '')), Gradenumber=int(data.get('usertype', '')))
-#        user_obj.save()
-#        print("对新用户进行了创建用户表操作")
-#     else:
-#         if user_obj.PasswordQZ != _password:
-#             user_obj.PasswordQZ = _password
-#             user_obj.save()
-#             print("对新用户进行了更新密码的操作")
-#
-#     share_obj, created = Share.objects.get_or_create(Usernumber_id=_account)
-#     # 创建共享表
-#     if created:
-#         print("对新用户进行了创建共享表操作")
-#     else:
-#         print("共享表已存在")
-#
-#     if req.status_code == 200:
-#         data = json.loads(req.text)
-#         return JsonResponse(data, safe=False)
-#     else:
-#         error = {
-#             "code": 4004,
-#             "message": "Bad Request"
-#         }
-#         error = json.dumps(error)
-#         return HttpResponse(content=error, content_type='application/json',status=400)
-#
-# def CurrentTimeQZ(request):
-#     """
-#     获取当前时间的视图函数
-#     """
-#     if request.method == "POST":
-#         # 从请求体中解析参数
-#         try:
-#             json_param = json.loads(request.body.decode())
-#         except json.JSONDecodeError:
-#             error = {
-#                 "code": 4000,
-#                 "message": "Invalid JSON format"
-#             }
-#             return HttpResponse(json.dumps(error), content_type='application/json', status=400)
-#
-#         # 检查必要参数
-#         _account = json_param.get('account')
-#         _password = json_param.get('password')
-#         token = json_param.get("token")
-#         if not (_account and _password  and token):
-#             error = {
-#                 "code": 4002,
-#                 "message": "Missing parameter"
-#             }
-#             return HttpResponse(json.dumps(error), content_type='application/json', status=400)
-#
-#         # 设置请求头
-#         HEADERS["token"] = token
-#
-#         # 解析 cookie 字符串并创建会话
-#         try:
-#
-#             session = requests.Session()
-#         except:
-#             error = {
-#                 "code": 4008,
-#                 "message": "Login Error"
-#             }
-#             return HttpResponse(json.dumps(error), content_type='application/json', status=400)
-#
-#         # 构造 GET 请求参数
-#         params = {
-#             "method": "getCurrentTime",
-#             "currDate": datetime.datetime.now().strftime("%Y-%m-%d")
-#         }
-#
-#         # 发送请求
-#         try:
-#             req = session.get(url, params=params, timeout=5, headers=HEADERS)
-#             req.raise_for_status()  # 检查响应状态码是否为 200
-#         except requests.exceptions.RequestException as e:
-#             error = {
-#                 "code": 4001,
-#                 "message": "Session Error"
-#             }
-#             return HttpResponse(json.dumps(error), content_type='application/json', status=400)
-#
-#         # 返回响应结果
-#         return HttpResponse(req.content, content_type='application/json')
-#
-#     else:
-#         error = {
-#             "code": 4003,
-#             "message": "Invalid request method"
-#         }
-#         return HttpResponse(json.dumps(error), content_type='application/json', status=405)
-# def EmptyClassroomInfo(request):
-#     # 获取 POST 请求的参数
-#     postbody = request.body
-#     try:
-#         json_param = json.loads(postbody.decode())
-#     except json.JSONDecodeError:
-#         error = {
-#             "code": 4000,
-#             "message": "Invalid JSON payload"
-#         }
-#         return JsonResponse(error, status=400)
-#
-#     # 获取参数中的账号、密码、cookie 和 idleTime
-#     _account = json_param.get('account')
-#     _password = json_param.get('password')
-#     get_cont = json_param.get("cont")
-#     token = json_param.get("token")
-#
-#     # 设置请求头中的 token
-#     HEADERS["token"] = token
-#
-#     # 设置 idleTime 参数
-#     idleTime = "allday" if get_cont is None else get_cont
-#
-#
-#
-#     # 构造会话对象
-#     session = requests.Session()
-#
-#     # 构造请求参数
-#     params = {
-#         "method": "getKxJscx",
-#         "time": datetime.datetime.now().strftime("%Y-%m-%d"),
-#         "idleTime": idleTime
-#     }
-#
-#     try:
-#         # 发送 GET 请求
-#         req = session.get(url, params=params, timeout=5, headers=HEADERS)
-#         req.raise_for_status()
-#     except requests.exceptions.RequestException as e:
-#         error = {
-#             "code": 4001,
-#             "message": "Session Error"
-#         }
-#         return JsonResponse(error, status=400)
-#     # 返回 JSON 格式的响应
-#     result = {"data": req.json()}
-#     return JsonResponse(result, status=200, safe=False)
-#
-# def GradeInfo(request):
-#     """
-#     说明：获取学生成绩信息视图函数
-#
-#     参数：
-#     - request: 请求对象
-#
-#     返回值：
-#     - HttpResponse对象
-#
-#     异常：
-#     - 返回4001错误：Session错误
-#     - 返回4008错误：登录错误
-#     """
-#
-#     # 设置全局变量
-#     global HEADERS, url
-#
-#     # 解析POST请求中的JSON参数
-#     try:
-#         json_param = json.loads(request.body)
-#     except json.JSONDecodeError:
-#         # 返回JSON解码错误
-#         error = {
-#             "code": 4000,
-#             "message": "JSON Decode Error"
-#         }
-#         return HttpResponse(content=json.dumps(error), content_type='application/json', status=400)
-#
-#     # 获取必需的参数
-#     _account = json_param.get('account')
-#     _password = json_param.get('password')
-#     get_cont = json_param.get("cont")
-#     token = json_param.get("token")
-#
-#     # 检查必需的参数是否存在
-#     if not (_account and _password  and token):
-#         # 返回缺少参数的错误
-#         error = {
-#             "code": 4002,
-#             "message": "Missing Required Parameters"
-#         }
-#         return HttpResponse(content=json.dumps(error), content_type='application/json', status=400)
-#
-#     # 设置请求头部的token字段
-#     HEADERS["token"] = token
-#
-#     # 获取sy参数（如果存在）
-#     sy = "" if get_cont is None else get_cont
-#
-#     try:
-#         # 解析cookies字符串，构建会话
-#         session = requests.Session()
-#
-#         # 设置请求参数
-#         params = {
-#             "method": "getCjcx",
-#             "xh": _account,
-#             "xnxqid": sy
-#         }
-#
-#         # 发送GET请求
-#         req = session.get(url, params=params, timeout=5, headers=HEADERS)
-#         req.raise_for_status()  # 检查HTTP错误状态码
-#
-#     except (requests.exceptions.RequestException, ValueError):
-#         # 返回Session错误
-#         error = {
-#             "code": 4001,
-#             "message": "Session Error"
-#         }
-#         return HttpResponse(content=json.dumps(error), content_type='application/json', status=400)
-#
-#     except requests.exceptions.HTTPError as err:
-#         # 返回HTTP错误
-#         error = {
-#             "code": err.response.status_code,
-#             "message": err.response.reason
-#         }
-#         return HttpResponse(content=json.dumps(error), content_type='application/json', status=err.response.status_code)
-#
-#     # 返回学生成绩信息
-#     return HttpResponse(content=req, content_type='application/json')
-#
-# def ExamInfo(request):
-#     """
-#     获取考试信息视图函数
-#     """
-#     # 获取请求参数
-#     try:
-#         postbody = request.body
-#         json_param = json.loads(postbody.decode())
-#         _account = json_param.get('account')
-#         _password = json_param.get('password')
-#         token = json_param.get("token")
-#     except (json.JSONDecodeError, UnicodeDecodeError) as e:
-#         error = {
-#             "code": 4000,
-#             "message": "Request Parameter Error",
-#             "details": str(e)
-#         }
-#         error = json.dumps(error)
-#         return HttpResponse(content=error, content_type='application/json', status=400)
-#
-#
-#     HEADERS["token"] = token
-#
-#
-#
-#     session = requests.Session()
-#
-#     # 发送 GET 请求获取考试信息
-#     params = {
-#         "method": "getKscx",
-#         "xh": _account,
-#     }
-#     try:
-#         req = session.get(url, params=params, timeout=5, headers=HEADERS)
-#         req.raise_for_status()
-#     except RequestException as e:
-#         error = {
-#             "code": 4001,
-#             "message": "Request Error",
-#             "details": str(e)
-#         }
-#         error = json.dumps(error)
-#         print(error)
-#         return HttpResponse(content=error, content_type='application/json', status=400)
-#
-#     return HttpResponse(content=req.content, content_type='application/json', status=200)
+    # 获取请求参数
+    try:
+        account = json_param.get('account')
+        token = json_param.get("token")
+    except:
+        error = {
+            "code": 4004,
+            "message": "Invalid Parameters"
+        }
+        return JsonResponse(error, status=400)
 
-# def process_coureselib_data():
+    # 验证token
+    try:
+        if not auth_by_snumber(account, token):
+            error = {"code": 4000, "message": "TOKEN Error"}
+            return JsonResponse(error, status=400)
+    except Exception as e:
+        error = {
+            "code": 4004,
+            "message": f"TOKEN Error: {str(e)}"
+        }
+        return JsonResponse(error, status=400)
+    # 获取食物地点
+    try:
+        # 获取所有食物信息
+        foods = Food.objects.all().values('name', 'kind', 'phone', 'address', 'location__name')
+        food_list = []
+
+        for food in foods:
+            # 为每种食物创建一个字典
+            food_dict = {
+                "name": food['name'],
+                "kind": food['kind'],
+                "phone": food['phone'],
+                "address": food['address'],
+                "location": food['location__name']
+            }
+            food_list.append(food_dict)
+
+        # 将结果封装在foodList键下
+        response = {
+            "foodList": food_list
+        }
+        return JsonResponse(response)
+
+    except Exception as e:
+        # 处理任何异常
+        error = {
+            "code": 5000,
+            "message": f"Server Error: {str(e)}"
+        }
+        return JsonResponse(error, status=500)
+    # 返回食物地点
+    return HttpResponse(content=json.dumps(foodplace), content_type='application/json', status=200)
+
+# 静态资源管理
+def GetStaticResource(request):
+    # 检查请求类型
+    if request.method != 'POST':
+        return JsonResponse({"code": 400, "message": "无效的请求方式"}, status=400)
+
+    # 解析 JSON 参数
+    try:
+        json_param = json.loads(request.body.decode())
+    except ValueError:
+        return JsonResponse({"code": 4009, "message": "无效的JSON数据"}, status=400)
+
+    # 获取并校验必要的参数
+    kind = json_param.get('kind')
+    if kind is None:
+        return JsonResponse({"code": 400, "message": "'kind'请求中缺少参数"}, status=400)
+    # 从数据库中找出kind等于输入kind的值并返回其查询所有内容数组
+    try:
+        static_resource = Static.objects.filter(kind=kind).values()
+    except Static.DoesNotExist:
+        error = {
+            "code": 4009,
+            "message": "Begin Data Error"
+        }
+        return HttpResponse(content=json.dumps(error), content_type='application/json')
+    try:
+        # 尝试将查询到的数组转换成列表
+        static_resource_list = list(static_resource)
+    except TypeError:
+        error = {
+            "code": 4009,
+            "message": "查询到的数组转换成列表失败"
+        }
+        return HttpResponse(content=json.dumps(error), content_type='application/json')
+
+    try:
+        # 尝试将列表转换成json格式
+        static_resource_json = json.dumps(static_resource_list)
+    except json.JSONDecodeError:
+        error = {
+            "code": 4009,
+            "message": "列表转换成json格式"
+        }
+        return HttpResponse(content=json.dumps(error), content_type='application/json')    # 返回json格式数据
+    return HttpResponse(content=static_resource_json, content_type='application/json')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
