@@ -104,13 +104,16 @@ def Logininfo(request):
             # 发起网络请求，获取用户的 openid 和 session_key
             try:
                 response = requests.get(
-                    f'https://api.weixin.qq.com/sns/jscode2session?appid=wx09eeff6c032da35a&secret=cbabace88e0f70970a07eb468d6db23d&js_code={code}&grant_type=authorization_code')
+                    f'https://api.weixin.qq.com/sns/jscode2session?appid=wxdb4a3a20947d7c4a&secret=079a7e3a70baa5f21854f45e77228806&js_code={code}&grant_type=authorization_code')
                 response.raise_for_status()  # 抛出异常以处理非200状态码
             except requests.exceptions.RequestException as e:
                 return JsonResponse({'error': f'网络错误: {e}'})
             # 解析微信服务器的返回结果
             data = response.json()
             openid = data.get('openid')
+            if not openid:
+                # 如果没有获取到 openid，返回一个错误信息
+                return JsonResponse({'status': 'error', 'message': '无法获取openid'})
             # session_key = data.get('session_key')
 
             # 如果 openid 返回成功，读入输入的数据存入数据库，如果有这个用户只更新 Openid，没有这个用户新建表
