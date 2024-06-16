@@ -17,7 +17,7 @@ from django.contrib.auth import authenticate
 from django.core.cache import cache
 from hashlib import md5
 import jwt
-
+from cryptography.fernet import Fernet
 from ConQZ.models import User,DepartmentClass,Share,LikesInfo,Course,CourseTime,CourseSchedule,FoodLocation,Food,Static
 from requests import RequestException
 
@@ -36,30 +36,54 @@ HEADERS = {
 }
 url = "http://jwgl.sdust.edu.cn/app.do"
 
-#工具函数
+# 配置日志
+logging.basicConfig(level=logging.INFO)
 
-def auth_by_snumber(snumber,token): #微信鉴权请求
-    """根据学号和openid鉴权"""
-    if not snumber or not token:
+# 已经生成并保存好的密钥
+key = b'wDtZzop686-Am-kxhzVv9_FtXyyogKjPGqFlFxrrM9A='
+cipher_suite = Fernet(key)
+
+def encrypt_data(data):
+    """加密数据"""
+    if not data:
+        logging.error("尝试加密空数据")
+        return None
+    encrypted_data = cipher_suite.encrypt(data.encode())
+    logging.info(f"数据加密成功: {encrypted_data}")
+    return encrypted_data
+
+def decrypt_data(token):
+    """解密数据"""
+    try:
+        decrypted_data = cipher_suite.decrypt(token.encode()).decode()
+        logging.info(f"数据解密成功: {decrypted_data}")
+        return decrypted_data
+    except Exception as e:
+        logging.error(f"解密失败: {e}")
+        return None
+def auth_by_snumber(snumber, encrypted_snumber):
+    """根据学号和加密的学号鉴权"""
+    if not snumber or not encrypted_snumber:
+        logging.error("缺失学号或加密学号")
         return None
 
-    # 解析token获取openid
-    try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
-        openid = payload['openid']
-        print(openid)
-    except jwt.exceptions.ExpiredSignatureError:
-        return False
-    except jwt.exceptions.InvalidTokenError:
+    # 解密加密的学号
+    decrypted_snumber = decrypt_data(encrypted_snumber)
+    if decrypted_snumber is None:
+        logging.error("解密加密学号失败")
         return False
 
-    # 根据snumber和openid查询用户
-    try:
-        user = User.objects.get(Snumber=snumber, Openid=openid)
-    except User.DoesNotExist:
+    if decrypted_snumber == snumber:
+        try:
+            user = User.objects.get(Snumber=snumber)
+            logging.info(f"用户验证成功: {user}")
+            return True
+        except User.DoesNotExist:
+            logging.error(f"找不到学号为 {snumber} 的用户")
+            return False
+    else:
+        logging.error("提供的学号与解密后的学号不匹配")
         return False
-
-    return True
 #加密/解密邀请码
 ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 mappings = {c: i for i, c in enumerate(ALPHABET)}
@@ -101,51 +125,27 @@ def Logininfo(request):
         code = json_param.get('code')
 
         if code:
-            # 发起网络请求，获取用户的 openid 和 session_key
-            try:
-                response = requests.get(
-                    f'https://api.weixin.qq.com/sns/jscode2session?appid=wxdb4a3a20947d7c4a&secret=079a7e3a70baa5f21854f45e77228806&js_code={code}&grant_type=authorization_code')
-                response.raise_for_status()  # 抛出异常以处理非200状态码
-            except requests.exceptions.RequestException as e:
-                return JsonResponse({'error': f'网络错误: {e}'})
-            # 解析微信服务器的返回结果
-            data = response.json()
-            openid = data.get('openid')
-            if not openid:
-                # 如果没有获取到 openid，返回一个错误信息
-                return JsonResponse({'status': 'error', 'message': '无法获取openid'})
-            # session_key = data.get('session_key')
 
-            # 如果 openid 返回成功，读入输入的数据存入数据库，如果有这个用户只更新 Openid，没有这个用户新建表
+            if not auth_by_snumber(snumber, code):
+                error = {"code": 4000, "message": "TOKEN Error"}
+                return JsonResponse(error)
+
+            # 如果 openid 返回成功，读入输入的数据存入数据库，如果有这个用户就返回code为token，没有新建表
             try:
                 user_obj = User.objects.get(Snumber=account)
-                print(user_obj.Openid)
-                user_obj.Openid = openid
                 user_obj.save()
-                print(user_obj.Openid)
-                print(openid)
-                print("更新了用户表的 Openid")
             except User.DoesNotExist:
                 user_obj = User.objects.create(Snumber=account, Name=name,
                                                Classname=classname, Majorname=majorname,
                                                Collegename=collegename,
                                                Enteryear=enteryear,
-                                               Gradenumber=gradenumber,Openid=openid)
+                                               Gradenumber=gradenumber,Openid=code)
                 user_obj.save()
                 print("创建了新用户表")
 
             share_obj, created = Share.objects.get_or_create(Usernumber_id=account)
-            # 创建共享表
-            if created:
-                print("创建了共享表")
-            else:
-                print("共享表已存在")
 
-            # 根据 openid 和 session_key 进行登录验证，并返回响应数据
-            # 绑定 openid 到 token
-            payload = {'openid': openid}
-            token = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
-            return JsonResponse({'status': 'success', 'token': token})
+            return JsonResponse({'status': 'success', 'token': code})
 
         else:
             return JsonResponse({'status': 'error', 'message': '缺少 code 参数'})
@@ -2198,7 +2198,17 @@ def GetFoodKind(request):
         }
         return JsonResponse(error, status=400)
 
-
+    # 验证token
+    try:
+        if not auth_by_snumber(account, token):
+            error = {"code": 4000, "message": "TOKEN Error"}
+            return JsonResponse(error, status=400)
+    except Exception as e:
+        error = {
+            "code": 4004,
+            "message": f"TOKEN Error: {str(e)}"
+        }
+        return JsonResponse(error, status=400)
     # 获取食物地点
     try:
         # 获取所有食物信息
