@@ -2198,17 +2198,7 @@ def GetFoodKind(request):
         }
         return JsonResponse(error, status=400)
 
-    # 验证token
-    try:
-        if not auth_by_snumber(account, token):
-            error = {"code": 4000, "message": "TOKEN Error"}
-            return JsonResponse(error, status=400)
-    except Exception as e:
-        error = {
-            "code": 4004,
-            "message": f"TOKEN Error: {str(e)}"
-        }
-        return JsonResponse(error, status=400)
+
     # 获取食物地点
     try:
         # 获取所有食物信息
